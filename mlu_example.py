@@ -197,11 +197,14 @@ if __name__ == '__main__':
                 traced_model = torch.jit.trace(model, data, check_trace=False)
                 #print(traced_model.graph)
                 if not args.save_cambricon:
+                    print('start inference')
                     out = traced_model(data)
+                    print('end inference')
                     if args.half_input:
                         out = out.cpu().type(torch.FloatTensor)
                     else:
                         out = out.cpu()
+                    print('saving',out.shape)
                     np.save('mlu_out_jit.npy',out.detach().numpy().reshape(-1,512))
                     # np.savetxt("mlu_out_firstconv_half_4c.txt", out.detach().numpy().reshape(-1,1), fmt='%.6f')
                     print("run mlu fusion finish!")
@@ -212,6 +215,7 @@ if __name__ == '__main__':
             else:
                 print('using layer by layer inference')
                 out = model(data)
+                print('done')
                 if args.half_input:
                     out = out.cpu().type(torch.FloatTensor)
                 else:
