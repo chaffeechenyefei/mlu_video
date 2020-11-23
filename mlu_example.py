@@ -169,6 +169,7 @@ if __name__ == '__main__':
         print("Resnet101 int8 quantization end!")
     else:
         if not args.mlu:
+            print('doing cpu inference')
             with torch.no_grad():
                 out = model(data)
                 out = out.data.cpu().numpy().reshape(-1,512)
@@ -176,6 +177,7 @@ if __name__ == '__main__':
             # np.savetxt("cpu_out.txt", out.cpu().detach().numpy().reshape(-1,1), fmt='%.6f')
             print("run cpu finish!")
         else:
+            print('doing mlu inference')
             # model = quantize_model(model, inplace=True)
             model = mlu_quantize.quantize_dynamic_mlu(model)
             checkpoint = torch.load('./resnet101_mlu_int8.pth', map_location='cpu')
@@ -183,6 +185,7 @@ if __name__ == '__main__':
             # model.eval().float()
             model = model.to(ct.mlu_device())
             if args.jit:
+                print('using jit inference')
                 if args.save_cambricon:
                     ct.save_as_cambricon(args.mname)
                     if args.fake_device:
@@ -203,9 +206,10 @@ if __name__ == '__main__':
                     ct.save_as_cambricon("")
                     print("Save Resnet101 offline cambricon successfully!")
             else:
+                print('using layer by layer inference')
                 out = model(data)
                 print('out:',out.shape)
-                np.save('mlu_out.txt', out.detach().numpy().reshape(-1, 512))
+                np.save('mlu_out.npy', out.detach().numpy().reshape(-1, 512))
                 print("run mlu layer_by_layer finish!")
 
 
