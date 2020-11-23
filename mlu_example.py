@@ -102,16 +102,20 @@ if __name__ == '__main__':
     if args.check:
         pytorch_result = np.load('cpu_out.npy')
         mlu_result = np.load('mlu_out.npy')
+        mlu_jit_result = np.load('mlu_out_jit.npy')
 
-        print('shapes:',pytorch_result.shape,mlu_result.shape)
+        print('shapes:',pytorch_result.shape,mlu_result.shape,mlu_jit_result.shape)
         B = pytorch_result.shape[0]
         assert B == mlu_result.shape[0], 'Err!!!'
 
-        diff = pytorch_result - mlu_result
-        diff = math.sqrt((diff**2).sum()) / B
+        diff1 = pytorch_result - mlu_result
+        diff1 = math.sqrt((diff1**2).sum()) / B
+        print('mean instance difference: %f' % diff1)
 
-        print('mean instance difference: %f'%diff)
-
+        diff2 = pytorch_result - mlu_jit_result
+        diff2 = math.sqrt((diff2**2).sum()) / B
+        print('mean instance difference: %f' % diff2)
+        
         exit(0)
 
 
@@ -198,7 +202,7 @@ if __name__ == '__main__':
                         out = out.cpu().type(torch.FloatTensor)
                     else:
                         out = out.cpu()
-                    np.save('mlu_out_jit.txt',out.detach().numpy().reshape(-1,512))
+                    np.save('mlu_out_jit.npy',out.detach().numpy().reshape(-1,512))
                     # np.savetxt("mlu_out_firstconv_half_4c.txt", out.detach().numpy().reshape(-1,1), fmt='%.6f')
                     print("run mlu fusion finish!")
                 else:
