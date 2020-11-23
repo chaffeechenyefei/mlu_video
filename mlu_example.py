@@ -17,10 +17,10 @@ import torch_mlu.core.mlu_quantize as mlu_quantize
 import argparse
 import cv2
 import numpy as np
-import random
+import random,math
 from sklearn.preprocessing import normalize
 from cfg import model_dict
-from eval_utils.inference_api import Inference
+from FaceRecog.eval_utils.inference_api import Inference
 
 "python XXX.py --mlu false  --quantization true"
 
@@ -67,6 +67,7 @@ def preprocess(img_cv2, mlu=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--check',action='store_true',help='result will be compared only...')
     parser.add_argument('--model_name', default='resnet101_irse_mx')
     parser.add_argument('--data',help='data path to the images used for quant')
     parser.add_argument('--ext',default='.jpg')
@@ -97,6 +98,22 @@ if __name__ == '__main__':
     parser.add_argument("--batch_size", dest="batch_size", help="batch size for one inference.",
                         default=1, type=int)
     args = parser.parse_args()
+
+    if args.check:
+        pytorch_result = np.load('cpu_out.npy')
+        mlu_result = np.load('mlu_out.npy')
+
+        print('shapes:',pytorch_result.shape,mlu_result.shape)
+        B = pytorch_result.shape[0]
+        assert B == mlu_result.shape[0], 'Err!!!'
+
+        diff = pytorch_result - mlu_result
+        diff = math.sqrt((diff**2).sum()) / B
+
+        print('mean instance difference: %f'%diff)
+
+        exit(0)
+
 
     ct.set_core_number(args.core_number)
     ct.set_core_version(args.mcore)
@@ -138,6 +155,7 @@ if __name__ == '__main__':
         model = infer._load_model()
 
     if args.quantization:
+        print('doing quantization on cpu')
         mean = [0, 0, 0]
         std = [1.0, 1.0, 1.0]
         qconfig = {'iteration':data.shape[0], 'use_avg':True, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False}
