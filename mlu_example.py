@@ -115,7 +115,7 @@ if __name__ == '__main__':
         diff2 = pytorch_result - mlu_jit_result
         diff2 = math.sqrt((diff2**2).sum()) / B
         print('mean instance difference: %f' % diff2)
-        
+
         exit(0)
 
 
@@ -212,7 +212,11 @@ if __name__ == '__main__':
             else:
                 print('using layer by layer inference')
                 out = model(data)
-                print('out:',out.shape)
+                if args.half_input:
+                    out = out.cpu().type(torch.FloatTensor)
+                else:
+                    out = out.cpu()
+                print('out:', out.shape)
                 np.save('mlu_out.npy', out.detach().numpy().reshape(-1, 512))
                 print("run mlu layer_by_layer finish!")
 
