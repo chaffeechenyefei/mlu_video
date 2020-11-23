@@ -121,7 +121,8 @@ if __name__ == '__main__':
 
     image_list = [ pj(args.data,c) for c in os.listdir(args.data) if c.endswith(args.ext) ]
     K = min([len(image_list),128])
-    image_list = random.sample(image_list,K)
+    # image_list = random.sample(image_list,K)
+    iamge_list = image_list[:128]
     print('sampled %d data'%len(image_list))
 
     input_img = [cv2.imread(c) for c in image_list]
