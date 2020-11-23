@@ -144,6 +144,7 @@ if __name__ == '__main__':
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
         #print(model_quantized)
         #print('data:',data)
+        print('data.shape=',data.shape)
         model_quantized(data)
         torch.save(model_quantized.state_dict(), "./resnet101_mlu_int8.pth")
         print("Resnet101 int8 quantization end!")
