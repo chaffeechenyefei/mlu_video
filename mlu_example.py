@@ -103,7 +103,7 @@ if __name__ == '__main__':
     print("batch_size is {}, core number is {}".format(args.batch_size, args.core_number))
 
     image_list = [ pj(args.data,c) for c in os.listdir(args.data) if c.endswith(args.ext) ]
-    K = max([len(image_list),256])
+    K = min([len(image_list),128])
     image_list = random.sample(image_list,K)
     print('sampled %d data'%len(image_list))
 
