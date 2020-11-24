@@ -106,16 +106,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.check:
-        pytorch_result = np.load('cpu_out.npy')
-        mlu_result = np.load('mlu_out.npy')
-        cpu_quant_result = np.load('cpu_quant_out.npy')
+        pytorch_loc = np.load('cpu_loc.npy')
+        mlu_loc = np.load('mlu_loc.npy')
+        cpu_quant_loc = np.load('cpu_quant_loc.npy')
         # mlu_jit_result = np.load('mlu_out_jit.npy')
 
-        print('shapes:',pytorch_result.shape,mlu_result.shape)#,mlu_jit_result.shape)
-        B = pytorch_result.shape[0]
-        assert B == mlu_result.shape[0], 'Err!!!'
 
-        diff1 = pytorch_result - mlu_result
+        B = pytorch_loc.shape[0]
+        assert B == mlu_loc.shape[0], 'Err!!!'
+
+        diff1 = pytorch_loc - mlu_loc
         diff1 = math.sqrt((diff1**2).sum()) / B
         print('mean instance difference: %f' % diff1)
 
@@ -123,7 +123,7 @@ if __name__ == '__main__':
         # diff2 = math.sqrt((diff2**2).sum()) / B
         # print('mean instance difference: %f' % diff2)
 
-        diff3 = pytorch_result - cpu_quant_result
+        diff3 = pytorch_loc - cpu_quant_loc
         diff3 = math.sqrt((diff3**2).sum()) / B
         print('mean instance difference: %f' % diff3)
 
