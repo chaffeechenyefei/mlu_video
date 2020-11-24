@@ -65,6 +65,12 @@ def preprocess_retinaface(img_cv2, mlu=False):
     img_t = torch.from_numpy(img_data)
     return img_t
 
+def fetch_cpu_data(x,use_half_input=False):
+    if use_half_input:
+        output = x.cpu().type(torch.FloatTensor)
+    else:
+        output = x.cpu()
+    return output.detach().numpy()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -172,21 +178,27 @@ if __name__ == '__main__':
         locs, confs, landmss = model_quantized(data)
         torch.save(model_quantized.state_dict(), "./retinaface_mlu_int8.pth")
         print("Retinaface int8 quantization end!")
-        if args.half_input:
-            output = locs.cpu().type(torch.FloatTensor)
-        else:
-            output = locs.cpu()
-        print('saving', output.shape)
-        np.save('cpu_quant_out.npy', output.detach().numpy().reshape(-1, 512))
+        _locs = fetch_cpu_data(locs,args.half_input)
+        _confs = fetch_cpu_data(confs,args.half_input)
+        _landmss = fetch_cpu_data(landmss,args.half_input)
+
+        print('saving', _locs.shape,_confs.shape,_landmss.shape)
+        np.save('cpu_quant_loc.npy', _locs)
+        np.save('cpu_quant_conf.npy', _confs)
+        np.save('cpu_quant_landms.npy', _landmss)
 
     else:
         if not args.mlu:
             print('doing cpu inference')
             with torch.no_grad():
-                out = model(data)
-                out = out.data.cpu().numpy().reshape(-1,512)
-                np.save('cpu_out.npy',out)
-            # np.savetxt("cpu_out.txt", out.cpu().detach().numpy().reshape(-1,1), fmt='%.6f')
+                locs, confs, landmss = model(data)
+                _locs = fetch_cpu_data(locs, args.half_input)
+                _confs = fetch_cpu_data(confs, args.half_input)
+                _landmss = fetch_cpu_data(landmss, args.half_input)
+
+                np.save('cpu_loc.npy', _locs)
+                np.save('cpu_conf.npy', _confs)
+                np.save('cpu_landms.npy', _landmss)
             print("run cpu finish!")
         else:
             print('doing mlu inference')
@@ -203,26 +215,27 @@ if __name__ == '__main__':
                 traced_model = torch.jit.trace(model, randinput, check_trace=False)
                 # print(traced_model.graph)
                 print('start inference')
-                out = traced_model(data)
+                locs, confs, landmss = traced_model(data)
                 print('end inference')
-                if args.half_input:
-                    out = out.cpu().type(torch.FloatTensor)
-                else:
-                    out = out.cpu()
-                print('saving', out.shape)
-                np.save('mlu_out_jit.npy', out.detach().numpy().reshape(-1, 512))
-                # np.savetxt("mlu_out_firstconv_half_4c.txt", out.detach().numpy().reshape(-1,1), fmt='%.6f')
+                _locs = fetch_cpu_data(locs, args.half_input)
+                _confs = fetch_cpu_data(confs, args.half_input)
+                _landmss = fetch_cpu_data(landmss, args.half_input)
+                print('saving', _locs.shape, _confs.shape, _landmss.shape)
+                np.save('mlu_jit_loc.npy', _locs)
+                np.save('mlu_jit_conf.npy', _confs)
+                np.save('mlu_jit_landms.npy', _landmss)
                 print("run mlu fusion finish!")
             else:
                 print('using layer by layer inference')
-                out = model(data)
+                locs, confs, landmss = model(data)
                 print('done')
-                if args.half_input:
-                    out = out.cpu().type(torch.FloatTensor)
-                else:
-                    out = out.cpu()
-                print('out:', out.shape)
-                np.save('mlu_out.npy', out.detach().numpy().reshape(-1, 512))
+                _locs = fetch_cpu_data(locs, args.half_input)
+                _confs = fetch_cpu_data(confs, args.half_input)
+                _landmss = fetch_cpu_data(landmss, args.half_input)
+                print('saving', _locs.shape, _confs.shape, _landmss.shape)
+                np.save('mlu_loc.npy', _locs)
+                np.save('mlu_conf.npy', _confs)
+                np.save('mlu_landms.npy', _landmss)
                 print("run mlu layer_by_layer finish!")
 
 
