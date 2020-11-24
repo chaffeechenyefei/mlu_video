@@ -17,7 +17,7 @@ import argparse
 import cv2
 import numpy as np
 from sklearn.preprocessing import normalize
-from eval_utils.inference_api import Inference
+from FaceRecog.eval_utils.inference_api import Inference
 
 def _format(img_cv2, format_size=112):
     org_h, org_w = img_cv2.shape[0:2]
@@ -34,16 +34,16 @@ def _normalize(img_cv2,mlu=False):
     img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
     # mean = [123.675, 116.28, 103.53]
     # std = [58.395, 57.12, 57.375]
-    if mlu:
-        mean = 0
-        std = 1.0
-    else:
-        mean = 127.5
-        std = 127.5
     img_data = np.asarray(img_cv2, dtype=np.float32)
-    img_data = img_data - mean
-    img_data = img_data / std
-    img_data = img_data.astype(np.float32)
+    if mlu:
+        return img_data #[0,255]
+    else:
+        mean = 0.5
+        std = 0.5
+        img_data /= 255
+        img_data = img_data - mean
+        img_data = img_data / std
+        img_data = img_data.astype(np.float32) #[0,1] normalized
     return img_data
 
 def preprocess(img_cv2, mlu=False):
@@ -58,6 +58,7 @@ def preprocess(img_cv2, mlu=False):
 class mlu_face_rec_inference(object):
     def __init__(self ,weights,model_name='resnet101_irse_mx',use_mlu=True):
         super(mlu_face_rec_inference,self).__init__()
+        self.use_mlu = use_mlu
         use_device = 'cpu'
         ckpt_fpath = None if use_mlu else weights
         infer = Inference(backbone_type=model_name,
@@ -68,7 +69,7 @@ class mlu_face_rec_inference(object):
             model = mlu_quantize.quantize_dynamic_mlu(model)
             checkpoint = torch.load(weights, map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
-            model.eval().float()
+            model.eval()
             self.model = model.to(ct.mlu_device())
         else:
             model.eval()
@@ -76,9 +77,18 @@ class mlu_face_rec_inference(object):
 
     @torch.no_grad()
     def execute(self,img_cv2):
-        data = preprocess(img_cv2)
+        """
+        :param img_cv2: img_cv2 = cv2.imread() or [cv2.imread(c) for c in image_list] 
+        :return: unnormalized feature [N,512], N = len(img_cv2) if isinstance(img_cv2,list) else 1
+        """
+        if isinstance(img_cv2,list):
+            data = [preprocess(c, mlu=self.use_mlu) for c in img_cv2]
+            data = torch.cat(data, dim=0)
+            data = data.to(ct.mlu_device())
+        else:
+            data = preprocess(img_cv2,mlu=self.use_mlu)
         out = self.model(data)
-        out = out.detach().numpy().reshape(-1, 512)
+        out = out.cpu().detach().numpy().reshape(-1, 512)
         return out
 
 
