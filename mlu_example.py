@@ -44,16 +44,18 @@ def _normalize(img_cv2,mlu=False):
     img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
     # mean = [123.675, 116.28, 103.53]
     # std = [58.395, 57.12, 57.375]
-    if mlu:
-        mean = 0
-        std = 1.0
-    else:
-        mean = 127.5
-        std = 127.5
     img_data = np.asarray(img_cv2, dtype=np.float32)
-    img_data = img_data - mean
-    img_data = img_data / std
-    img_data = img_data.astype(np.float32)
+
+
+    if mlu:
+        return img_data #[0,255]
+    else:
+        mean = 0.5
+        std = 0.5
+        img_data /= 255
+        img_data = img_data - mean
+        img_data = img_data / std
+        img_data = img_data.astype(np.float32) #[0,1] normalized
     return img_data
 
 def preprocess(img_cv2, mlu=False):
@@ -102,6 +104,7 @@ if __name__ == '__main__':
     if args.check:
         pytorch_result = np.load('cpu_out.npy')
         mlu_result = np.load('mlu_out.npy')
+        cpu_quant_result = np.load('cpu_quant_out.npy')
         # mlu_jit_result = np.load('mlu_out_jit.npy')
 
         print('shapes:',pytorch_result.shape,mlu_result.shape)#,mlu_jit_result.shape)
@@ -116,6 +119,10 @@ if __name__ == '__main__':
         # diff2 = math.sqrt((diff2**2).sum()) / B
         # print('mean instance difference: %f' % diff2)
 
+        diff3 = pytorch_result - cpu_quant_result
+        diff3 = math.sqrt((diff3**2).sum()) / B
+        print('mean instance difference: %f' % diff3)
+
         exit(0)
 
 
@@ -124,7 +131,7 @@ if __name__ == '__main__':
     print("batch_size is {}, core number is {}".format(args.batch_size, args.core_number))
 
     image_list = [ pj(args.data,c) for c in os.listdir(args.data) if c.endswith(args.ext) ]
-    K = min([len(image_list),128])
+    K = min([len(image_list),args.batch_size])
     # image_list = random.sample(image_list,K)
     image_list = image_list[:K]
     print('sampled %d data'%len(image_list))
@@ -161,16 +168,24 @@ if __name__ == '__main__':
 
     if args.quantization:
         print('doing quantization on cpu')
-        mean = [0, 0, 0]
-        std = [1.0, 1.0, 1.0]
-        qconfig = {'iteration':data.shape[0], 'use_avg':True, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False}
+        mean = [0.5, 0.5, 0.5]
+        std = [0.5, 0.5, 0.5]
+        use_avg = False if data.shape[0] == 1 else True
+        qconfig = {'iteration':data.shape[0], 'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':True}
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
         #print(model_quantized)
         #print('data:',data)
         print('data.shape=',data.shape)
-        model_quantized(data)
+        output = model_quantized(data)
         torch.save(model_quantized.state_dict(), "./resnet101_mlu_int8.pth")
         print("Resnet101 int8 quantization end!")
+        if args.half_input:
+            output = output.cpu().type(torch.FloatTensor)
+        else:
+            output = output.cpu()
+        print('saving', output.shape)
+        np.save('cpu_quant_out.npy', output.detach().numpy().reshape(-1, 512))
+
     else:
         if not args.mlu:
             print('doing cpu inference')
