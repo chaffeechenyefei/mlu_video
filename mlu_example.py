@@ -205,7 +205,7 @@ if __name__ == '__main__':
             model = model.to(ct.mlu_device())
             if args.jit:
                 print('using jit inference')
-                traced_model = torch.jit.trace(model, data[0:1], check_trace=False)
+                traced_model = torch.jit.trace(model, torch.rand(1,3,112,112)*255, check_trace=False)
                 # print(traced_model.graph)
                 print('start inference')
                 out = traced_model(data)

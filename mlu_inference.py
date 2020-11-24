@@ -56,9 +56,14 @@ def preprocess(img_cv2, mlu=False):
 
 
 class mlu_face_rec_inference(object):
-    def __init__(self ,weights,model_name='resnet101_irse_mx',use_mlu=True):
+    def __init__(self ,weights,model_name='resnet101_irse_mx',use_mlu=True,use_jit=False):
         super(mlu_face_rec_inference,self).__init__()
+
+        ct.set_core_number(4)
+        ct.set_core_version('MLU270')
+
         self.use_mlu = use_mlu
+        self.use_jit = use_jit
         use_device = 'cpu'
         ckpt_fpath = None if use_mlu else weights
         infer = Inference(backbone_type=model_name,
@@ -71,7 +76,12 @@ class mlu_face_rec_inference(object):
             checkpoint = torch.load(weights, map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             model.eval()
-            self.model = model.to(ct.mlu_device())
+            model = model.to(ct.mlu_device())
+            if use_jit:
+                traced_model = torch.jit.trace(model, torch.rand(1, 3, 112, 112)*255, check_trace=False)
+                self.model = traced_model
+            else:
+                self.model = model
         else:
             print('==using pytorch model==')
             model.eval()
