@@ -42,18 +42,16 @@ def _format(img_cv2, format_size=112):
 
 
 def _normalize_retinaface(img_cv2,mlu=False):
-    img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
+    # img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
     # mean = [123.675, 116.28, 103.53]
     # std = [58.395, 57.12, 57.375]
     img_data = np.asarray(img_cv2, dtype=np.float32)
     if mlu:
         return img_data #[0,255]
     else:
-        mean = (104/255, 117/255, 123/255)
-        std = 1.0
-        img_data /= 255
+        mean = (104, 117, 123)
         img_data = img_data - mean
-        img_data = img_data / std
+        img_data = img_data
         img_data = img_data.astype(np.float32) #[0,1] normalized
     return img_data
 
@@ -168,7 +166,7 @@ if __name__ == '__main__':
     if args.quantization:
         print('doing quantization on cpu')
         mean = [ 104 / 255, 117 / 255, 123 / 255]
-        std = [1.0,1.0,1.0]
+        std = [1/255,1/255,1/255]
         use_avg = False if data.shape[0] == 1 else True
         qconfig = {'iteration':data.shape[0], 'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False}
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
