@@ -123,10 +123,10 @@ class EvalTupu(object):
         print('creating dictionary')
         pcnt = 0
         for pair in self.img_pairs:
-            fpath2feat_dict[pair['register']] = embedd[pcnt,:].reshape(1,512)
+            fpath2feat_dict[pair['register']] = embedd[pcnt,:].reshape(-1)
             pcnt += 1
             for test_fpath in pair['test_list']:
-                fpath2feat_dict[test_fpath] = embedd[pcnt,:].reshape(1,512)
+                fpath2feat_dict[test_fpath] = embedd[pcnt,:].reshape(-1)
                 pcnt += 1
 
         # for pcnt,pair in enumerate(self.img_pairs):
