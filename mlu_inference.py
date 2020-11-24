@@ -110,3 +110,17 @@ class mlu_face_rec_inference(object):
         return out
 
 
+if __name__ == "__main__":
+    print('just a usage example')
+
+    img_cv2 = cv2.imread('test.jpg')
+    mlu_face_model = mlu_face_rec_inference(weights='weights/face_rec/resnet101_mlu_int8.pth',use_mlu=True,use_jit=True)
+    cpu_face_model = mlu_face_rec_inference(weights='weights/face_rec/r101irse_model_3173.pth',use_mlu=False,use_jit=False)
+
+    mlu_face_feature = mlu_face_model.execute(img_cv2)
+    cpu_face_feature = cpu_face_model.execute(img_cv2)
+
+    mlu_face_feature = normalize(mlu_face_feature,axis=1)
+    cpu_face_feature = normalize(cpu_face_feature,axis=1)
+
+    print('cosine similarity =', mlu_face_feature@(cpu_face_feature.transpose()))
