@@ -214,7 +214,7 @@ class EvalTupu(object):
         return target_TPR
 
 
-def main(data_dir, use_mlu = False ,use_TTA = False, **kwargs):
+def main(data_dir, use_mlu = False, use_jit=False ,use_TTA = False, **kwargs):
     backbone_type = 'resnet101_irse_mx'
     if use_mlu:
         ckpt_fpath = 'resnet101_mlu_int8.pth'
@@ -224,7 +224,7 @@ def main(data_dir, use_mlu = False ,use_TTA = False, **kwargs):
     if data_dir is None:
         data_dir = '/data/data/evaluation/valid_labeled_faces'
 
-    infer_model = mlu_face_rec_inference(weights=ckpt_fpath,model_name=backbone_type,use_mlu=use_mlu)
+    infer_model = mlu_face_rec_inference(weights=ckpt_fpath,model_name=backbone_type,use_mlu=use_mlu,use_jit=use_jit)
     eval = EvalTupu(data_dir=data_dir, use_TTA=use_TTA)
     with torch.no_grad():
         eval(infer_model)
@@ -234,8 +234,9 @@ def main(data_dir, use_mlu = False ,use_TTA = False, **kwargs):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mlu',action='store_true')
+    parser.add_argument('--jit',action='store_true')
     parser.add_argument('--data',default=None)
     args = parser.parse_args()
 
-    main(data_dir=args.data,use_mlu=args.mlu)
+    main(data_dir=args.data,use_mlu=args.mlu,use_jit=args.jit)
     # search_best_model()
