@@ -163,8 +163,8 @@ if __name__ == '__main__':
     if not args.mlu:
         model = infer.model
         model.eval().float()
-    # else:
-        # model = infer._load_model()
+    else:
+        model = infer._get_model()
 
     if args.quantization:
         print('doing quantization on cpu')
