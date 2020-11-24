@@ -154,7 +154,7 @@ if __name__ == '__main__':
     print('==end==')
 
     if not args.mlu:
-        model = infer.model
+        model = infer.net
         model.eval().float()
     else:
         model = infer._get_model()
