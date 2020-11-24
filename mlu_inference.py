@@ -78,7 +78,10 @@ class mlu_face_rec_inference(object):
             model.eval()
             model = model.to(ct.mlu_device())
             if use_jit:
-                traced_model = torch.jit.trace(model, torch.rand(1, 3, 112, 112)*255, check_trace=False)
+                print('==jit==')
+                randinput = torch.rand(1,3,112,112)*255
+                randinput = randinput.to(ct.mlu_device())
+                traced_model = torch.jit.trace(model, randinput, check_trace=False)
                 self.model = traced_model
             else:
                 self.model = model
