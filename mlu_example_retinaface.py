@@ -137,6 +137,7 @@ if __name__ == '__main__':
     # image_list = random.sample(image_list,K)
     image_list = image_list[:K]
     print('sampled %d data'%len(image_list))
+    print(image_list[0])
 
     input_img = [cv2.imread(c) for c in image_list]
     data = [preprocess_retinaface(c , mlu=args.mlu) for c in input_img]
