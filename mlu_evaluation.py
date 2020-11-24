@@ -109,23 +109,43 @@ class EvalTupu(object):
         fpath2feat_dict = {}
         start_time = time.time()
         n_finish = 0
-        for pcnt,pair in enumerate(self.img_pairs):
-            print('%d/%d=%0.3f'%(pcnt,len(self.img_pairs),pcnt/len(self.img_pairs)),end='\r')
-            img1_cv2 = cv2.imread(pair['register'])
-            embedd1 = self._execute_inference(model, img1_cv2)
-            fpath2feat_dict[pair['register']] = embedd1
 
-            img2_cv2 = [ cv2.imread(c) for c in pair['test_list']]
-            embedd2 = self._execute_inference(model,img2_cv2)
-            for _pcnt,test_fpath in enumerate(pair['test_list']):
-                fpath2feat_dict[test_fpath] = embedd2[_pcnt,:].reshape(1,512)
-            # for test_fpath in pair['test_list']:
-            #     img2_cv2 = cv2.imread(test_fpath)
-            #     embedd2 = self._execute_inference(model, img2_cv2)
-            #     fpath2feat_dict[test_fpath] = embedd2
-            n_finish = n_finish + 1 + len(pair['test_list'])
+        img_cv2 = []
+        print('loading images')
+        for pair in self.img_pairs:
+            img_cv2.append(cv2.imread(pair['register']))
+            img2_cv2 = [cv2.imread(c) for c in pair['test_list']]
+            img_cv2.extend(img2_cv2)
+
+        print('extracting features')
+        embedd = self._execute_inference(model,img_cv2)
+
+        print('creating dictionary')
+        pcnt = 0
+        for pair in self.img_pairs:
+            fpath2feat_dict[pair['register']] = embedd[pcnt,:].reshape(1,512)
+            pcnt += 1
+            for test_fpath in pair['test_list']:
+                fpath2feat_dict[test_fpath] = embedd[pcnt,:].reshape(1,512)
+                pcnt += 1
+
+        # for pcnt,pair in enumerate(self.img_pairs):
+        #     print('%d/%d=%0.3f'%(pcnt,len(self.img_pairs),pcnt/len(self.img_pairs)),end='\r')
+        #     img1_cv2 = cv2.imread(pair['register'])
+        #     embedd1 = self._execute_inference(model, img1_cv2)
+        #     fpath2feat_dict[pair['register']] = embedd1
+        #
+        #     img2_cv2 = [ cv2.imread(c) for c in pair['test_list']]
+        #     embedd2 = self._execute_inference(model,img2_cv2)
+        #     for _pcnt,test_fpath in enumerate(pair['test_list']):
+        #         fpath2feat_dict[test_fpath] = embedd2[_pcnt,:].reshape(1,512)
+        #     # for test_fpath in pair['test_list']:
+        #     #     img2_cv2 = cv2.imread(test_fpath)
+        #     #     embedd2 = self._execute_inference(model, img2_cv2)
+        #     #     fpath2feat_dict[test_fpath] = embedd2
+        #     n_finish = n_finish + 1 + len(pair['test_list'])
         end_time = time.time()
-        process_speed = (end_time - start_time) / (n_finish + 1e-5)
+        process_speed = (end_time - start_time) / (pcnt + 1e-5)
         print('process_speed: {} sec'.format(process_speed))
 
         pair_distance_list = self._pair_match_test(fpath2feat_dict)
