@@ -86,9 +86,12 @@ class mlu_face_rec_inference(object):
         if isinstance(img_cv2,list):
             data = [preprocess(c, mlu=self.use_mlu) for c in img_cv2]
             data = torch.cat(data, dim=0)
-            data = data.to(ct.mlu_device())
         else:
             data = preprocess(img_cv2,mlu=self.use_mlu)
+
+        if self.use_mlu:
+            data = data.to(ct.mlu_device())
+            
         out = self.model(data)
         out = out.cpu().detach().numpy().reshape(-1, 512)
         return out
