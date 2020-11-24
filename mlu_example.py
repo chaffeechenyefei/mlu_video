@@ -137,7 +137,7 @@ if __name__ == '__main__':
     print('sampled %d data'%len(image_list))
 
     input_img = [cv2.imread(c) for c in image_list]
-    data = [preprocess(c , mlu=False) for c in input_img]
+    data = [preprocess(c , mlu=args.mlu) for c in input_img]
     print('len of data: %d'%len(data))
     #print('data:',data)
     data = torch.cat(data,dim=0)
@@ -163,8 +163,8 @@ if __name__ == '__main__':
     if not args.mlu:
         model = infer.model
         model.eval().float()
-    else:
-        model = infer._load_model()
+    # else:
+        # model = infer._load_model()
 
     if args.quantization:
         print('doing quantization on cpu')
