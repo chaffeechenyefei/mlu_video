@@ -205,28 +205,19 @@ if __name__ == '__main__':
             model = model.to(ct.mlu_device())
             if args.jit:
                 print('using jit inference')
-                if args.save_cambricon:
-                    ct.save_as_cambricon(args.mname)
-                    if args.fake_device:
-                        ct.set_device(-1)
-                traced_model = torch.jit.trace(model, data, check_trace=False)
-                #print(traced_model.graph)
-                if not args.save_cambricon:
-                    print('start inference')
-                    out = traced_model(data)
-                    print('end inference')
-                    if args.half_input:
-                        out = out.cpu().type(torch.FloatTensor)
-                    else:
-                        out = out.cpu()
-                    print('saving',out.shape)
-                    np.save('mlu_out_jit.npy',out.detach().numpy().reshape(-1,512))
-                    # np.savetxt("mlu_out_firstconv_half_4c.txt", out.detach().numpy().reshape(-1,1), fmt='%.6f')
-                    print("run mlu fusion finish!")
+                traced_model = torch.jit.trace(model, data[0:1], check_trace=False)
+                # print(traced_model.graph)
+                print('start inference')
+                out = traced_model(data)
+                print('end inference')
+                if args.half_input:
+                    out = out.cpu().type(torch.FloatTensor)
                 else:
-                    traced_model(data)
-                    ct.save_as_cambricon("")
-                    print("Save Resnet101 offline cambricon successfully!")
+                    out = out.cpu()
+                print('saving', out.shape)
+                np.save('mlu_out_jit.npy', out.detach().numpy().reshape(-1, 512))
+                # np.savetxt("mlu_out_firstconv_half_4c.txt", out.detach().numpy().reshape(-1,1), fmt='%.6f')
+                print("run mlu fusion finish!")
             else:
                 print('using layer by layer inference')
                 out = model(data)
