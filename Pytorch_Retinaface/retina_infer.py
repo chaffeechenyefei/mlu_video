@@ -264,22 +264,32 @@ class RetinaFaceDetONNX(object):
 
 class RetinaFaceDet(object):
     def __init__(self,model_type="mobile0.25",model_path="./weights/mobilenet0.25_Final.pth",
-                 backbone_location="./weights/mobilenetV1X0.25_pretrain.tar",use_cpu=True):
+                 backbone_location="./weights/mobilenetV1X0.25_pretrain.tar",use_cpu=True,loading=True):
         self.cfg = None
+        self.use_cpu = use_cpu
+        self.model_path = model_path
         if model_type == "mobile0.25":
             self.cfg = cfg_mnet
         elif model_type == "resnet50":
             self.cfg = cfg_re50
-        self.net = RetinaFace(cfg=self.cfg,phase="test",backbone_location=backbone_location)
-        self.net = load_model(self.net, model_path, use_cpu)
-        self.net.eval()
-
         self.device = torch.device("cpu" if use_cpu else "cuda")
-        self.net = self.net.to(self.device)
+        self.net = RetinaFace(cfg=self.cfg,phase="test",backbone_location=backbone_location)
+        if loading:
+            self.loading()
+
         self._priors = None
         self.im_width = 0
         self.im_height = 0
         self.im_nch = 0
+
+    def _get_model(self):
+        self.net.eval()
+        return self.net
+
+    def loading(self):
+        self.net = load_model(self.net, self.model_path, self.use_cpu)
+        self.net.eval()
+        self.net = self.net.to(self.device)
 
     def set_default_size(self,imgshape=[640,480,3]):#[H,W,nCh]
         im_height, im_width, im_nch = imgshape

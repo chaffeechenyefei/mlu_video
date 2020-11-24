@@ -4,8 +4,8 @@ curPath = os.path.abspath(os.path.dirname(__file__))
 rootPath = os.path.split(curPath)[0]
 sys.path.append(rootPath)
 sys.path.append(curPath)
-sys.path.append(pj(curPath,'FaceRecog'))
-# sys.path.append(pj(curPath,'Pytorch_Retinaface'))
+# sys.path.append(pj(curPath,'FaceRecog'))
+sys.path.append(pj(curPath,'Pytorch_Retinaface'))
 
 import torch
 import torch.nn as nn
@@ -20,8 +20,8 @@ import numpy as np
 import random,math
 from sklearn.preprocessing import normalize
 from cfg import model_dict
-from FaceRecog.eval_utils.inference_api import Inference
-# from Pytorch_Retinaface.retina_infer import RetinaFaceDet
+# from FaceRecog.eval_utils.inference_api import Inference
+from Pytorch_Retinaface.retina_infer import RetinaFaceDet
 
 "python XXX.py --mlu false  --quantization true"
 
@@ -41,27 +41,25 @@ def _format(img_cv2, format_size=112):
     return img_format
 
 
-def _normalize(img_cv2,mlu=False):
+def _normalize_retinaface(img_cv2,mlu=False):
     img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
     # mean = [123.675, 116.28, 103.53]
     # std = [58.395, 57.12, 57.375]
     img_data = np.asarray(img_cv2, dtype=np.float32)
-
-
     if mlu:
         return img_data #[0,255]
     else:
-        mean = 0.5
-        std = 0.5
+        mean = (104/255, 117/255, 123/255)
+        std = 1.0
         img_data /= 255
         img_data = img_data - mean
         img_data = img_data / std
         img_data = img_data.astype(np.float32) #[0,1] normalized
     return img_data
 
-def preprocess(img_cv2, mlu=False):
+def preprocess_retinaface(img_cv2, mlu=False):
     img_format = _format(img_cv2)
-    img_data = _normalize(img_format,mlu=mlu)
+    img_data = _normalize_retinaface(img_format,mlu=mlu)
     img_data = np.transpose(img_data, axes=[2, 0, 1])
     img_data = np.expand_dims(img_data, axis=0)
     img_t = torch.from_numpy(img_data)
@@ -71,7 +69,6 @@ def preprocess(img_cv2, mlu=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--check',action='store_true',help='result will be compared only...')
-    parser.add_argument('--model_name', default='resnet101_irse_mx')
     parser.add_argument('--data',help='data path to the images used for quant')
     parser.add_argument('--ext',default='.jpg')
 
@@ -138,7 +135,7 @@ if __name__ == '__main__':
     print('sampled %d data'%len(image_list))
 
     input_img = [cv2.imread(c) for c in image_list]
-    data = [preprocess(c , mlu=args.mlu) for c in input_img]
+    data = [preprocess_retinaface(c , mlu=args.mlu) for c in input_img]
     print('len of data: %d'%len(data))
     #print('data:',data)
     data = torch.cat(data,dim=0)
@@ -152,13 +149,8 @@ if __name__ == '__main__':
     # model = torchvision.models.resnet50()
     print('==pytorch==')
     use_device = 'cpu'
-    backbone_type = args.model_name
-    model_type = model_dict[args.model_name]['weights']
-    model_pth = pj(model_dict[args.model_name]['path'], model_type)
-    model_pth = os.path.abspath(model_pth)
-    infer = Inference(backbone_type=backbone_type,
-                      ckpt_fpath=model_pth,
-                      device=use_device)
+    loading = True if not args.mlu else False
+    infer = RetinaFaceDet(use_cpu=True,loading=False)
     print('==end==')
 
     if not args.mlu:
@@ -169,21 +161,21 @@ if __name__ == '__main__':
 
     if args.quantization:
         print('doing quantization on cpu')
-        mean = [0.5, 0.5, 0.5]
-        std = [0.5, 0.5, 0.5]
+        mean = [ 104 / 255, 117 / 255, 123 / 255]
+        std = [1.0,1.0,1.0]
         use_avg = False if data.shape[0] == 1 else True
         qconfig = {'iteration':data.shape[0], 'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False}
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
         #print(model_quantized)
         #print('data:',data)
         print('data.shape=',data.shape)
-        output = model_quantized(data)
-        torch.save(model_quantized.state_dict(), "./resnet101_mlu_int8.pth")
-        print("Resnet101 int8 quantization end!")
+        locs, confs, landmss = model_quantized(data)
+        torch.save(model_quantized.state_dict(), "./retinaface_mlu_int8.pth")
+        print("Retinaface int8 quantization end!")
         if args.half_input:
-            output = output.cpu().type(torch.FloatTensor)
+            output = locs.cpu().type(torch.FloatTensor)
         else:
-            output = output.cpu()
+            output = locs.cpu()
         print('saving', output.shape)
         np.save('cpu_quant_out.npy', output.detach().numpy().reshape(-1, 512))
 
@@ -200,7 +192,7 @@ if __name__ == '__main__':
             print('doing mlu inference')
             # model = quantize_model(model, inplace=True)
             model = mlu_quantize.quantize_dynamic_mlu(model)
-            checkpoint = torch.load('./resnet101_mlu_int8.pth', map_location='cpu')
+            checkpoint = torch.load('./retinaface_mlu_int8.pth', map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             # model.eval().float()
             model = model.to(ct.mlu_device())
