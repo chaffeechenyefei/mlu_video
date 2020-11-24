@@ -114,10 +114,15 @@ class EvalTupu(object):
             img1_cv2 = cv2.imread(pair['register'])
             embedd1 = self._execute_inference(model, img1_cv2)
             fpath2feat_dict[pair['register']] = embedd1
-            for test_fpath in pair['test_list']:
-                img2_cv2 = cv2.imread(test_fpath)
-                embedd2 = self._execute_inference(model, img2_cv2)
-                fpath2feat_dict[test_fpath] = embedd2
+
+            img2_cv2 = [ cv2.imread(c) for c in pair['test_list']]
+            embedd2 = self._execute_inference(model,img2_cv2)
+            for _pcnt,test_fpath in enumerate(pair['test_list']):
+                fpath2feat_dict[test_fpath] = embedd2[_pcnt,:].reshape(1,512)
+            # for test_fpath in pair['test_list']:
+            #     img2_cv2 = cv2.imread(test_fpath)
+            #     embedd2 = self._execute_inference(model, img2_cv2)
+            #     fpath2feat_dict[test_fpath] = embedd2
             n_finish = n_finish + 1 + len(pair['test_list'])
         end_time = time.time()
         process_speed = (end_time - start_time) / (n_finish + 1e-5)

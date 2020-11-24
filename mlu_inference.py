@@ -91,7 +91,7 @@ class mlu_face_rec_inference(object):
 
         if self.use_mlu:
             data = data.to(ct.mlu_device())
-            
+
         out = self.model(data)
         out = out.cpu().detach().numpy().reshape(-1, 512)
         return out
