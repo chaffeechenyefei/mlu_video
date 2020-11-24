@@ -66,12 +66,14 @@ class mlu_face_rec_inference(object):
                           device=use_device)
         model = infer.model
         if use_mlu:
+            print('==using mlu quantization model==')
             model = mlu_quantize.quantize_dynamic_mlu(model)
             checkpoint = torch.load(weights, map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             model.eval()
             self.model = model.to(ct.mlu_device())
         else:
+            print('==using pytorch model==')
             model.eval()
             self.model = model
 

@@ -109,7 +109,8 @@ class EvalTupu(object):
         fpath2feat_dict = {}
         start_time = time.time()
         n_finish = 0
-        for pair in self.img_pairs:
+        for pcnt,pair in enumerate(self.img_pairs):
+            print('%d/%d=%0.3f'%(pcnt,len(self.img_pairs),pcnt/len(self.img_pairs)),end='\r')
             img1_cv2 = cv2.imread(pair['register'])
             embedd1 = self._execute_inference(model, img1_cv2)
             fpath2feat_dict[pair['register']] = embedd1
