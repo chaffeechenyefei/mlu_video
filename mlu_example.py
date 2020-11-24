@@ -171,7 +171,7 @@ if __name__ == '__main__':
         mean = [0.5, 0.5, 0.5]
         std = [0.5, 0.5, 0.5]
         use_avg = False if data.shape[0] == 1 else True
-        qconfig = {'iteration':data.shape[0], 'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':True}
+        qconfig = {'iteration':data.shape[0], 'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False}
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
         #print(model_quantized)
         #print('data:',data)
