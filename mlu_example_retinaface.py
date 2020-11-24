@@ -45,13 +45,13 @@ def _normalize_retinaface(img_cv2,mlu=False):
     # img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
     # mean = [123.675, 116.28, 103.53]
     # std = [58.395, 57.12, 57.375]
+    img_cv2 = cv2.resize(img_cv2,dsize=(512,512))
     img_data = np.asarray(img_cv2, dtype=np.float32)
     if mlu:
         return img_data #[0,255]
     else:
         mean = (104, 117, 123)
         img_data = img_data - mean
-        img_data = img_data
         img_data = img_data.astype(np.float32) #[0,1] normalized
     return img_data
 
