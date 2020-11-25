@@ -865,6 +865,21 @@ def preprocess_retinaface(img_cv2, mlu=False):
     img_t = torch.from_numpy(img_data)
     return img_t
 
+
+def crop_face_from_bbox(img_cv2, dets):
+    scale = 1.3  # expand for better face feature extraction
+    img_faces = []
+    for ith, b in enumerate(dets):
+        b = list(map(int, b))
+        pwidth = int((b[2] - b[0]) * scale)
+        pheight = int((b[3] - b[1]) * scale)
+        pcx = int((b[2] + b[0]) / 2)
+        pcy = int((b[3] + b[1]) / 2)
+
+        img_face = cv2.getRectSubPix(img_cv2, (pwidth, pheight), (pcx, pcy))
+        img_faces.append(img_face)
+    return img_faces
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Retinaface')
 
@@ -901,6 +916,10 @@ if __name__ == '__main__':
         print(len(dets))
         print(dets[0])
         print(dets[0].shape)
+
+
+        smallfaces=crop_face_from_bbox(img_cv,dets[0])
+        cv2.imwrite('sally_small.jpg', smallfaces[0])
 
         for det in dets:
             for b in det:
