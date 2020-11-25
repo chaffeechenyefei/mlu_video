@@ -155,16 +155,20 @@ if __name__ == '__main__':
     print('==pytorch==')
     use_device = 'cpu'
     loading = True if not args.mlu else False
+    print('loading =',loading)
     model_path = 'weights/face_det/mobilenet0.25_Final.pth'
     model_path = os.path.abspath(model_path)
-    infer = RetinaFaceDet(model_path=model_path,use_cpu=True,loading=False)
+    print(model_path)
+    infer = RetinaFaceDet(model_path=model_path,use_cpu=True,loading=loading)
     print('==end==')
 
-    if not args.mlu:
-        model = infer.net
-        model.eval().float()
-    else:
-        model = infer._get_model()
+    model = infer._get_model()
+    # if not args.mlu:
+    #     # infer.loading()
+    #     model = infer.net
+    #     model.eval().float()
+    # else:
+    #     model = infer._get_model()
 
     if args.quantization:
         print('doing quantization on cpu')
