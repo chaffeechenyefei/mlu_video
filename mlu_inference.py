@@ -257,31 +257,53 @@ class mlu_face_rec_inference(object):
         return out
 
 
+def crop_face_from_bbox(img_cv2,dets):
+    scale = 1.3 #expand for better face feature extraction
+    img_faces = []
+    for ith, b in enumerate(dets):
+        b = list(map(int, b))
+        pwidth = int((b[2] - b[0]) * scale)
+        pheight = int((b[3] - b[1]) * scale)
+        pcx = int((b[2] + b[0]) / 2)
+        pcy = int((b[3] + b[1]) / 2)
+
+        img_face = cv2.getRectSubPix(img_cv2, (pwidth, pheight), (pcx, pcy))
+        img_faces.append(img_face)
+    return img_faces
+
 if __name__ == "__main__":
     print('just a usage example')
-    # img_cv2 = cv2.imread('sally.jpg')
-    img_cv2 = np.random.random((640,480,3))*255
-    img_cv2 = img_cv2.astype(np.uint8)
+    img_cv2 = cv2.imread('sally.jpg')
+    # img_cv2 = np.random.random((640,480,3))*255
+    # img_cv2 = img_cv2.astype(np.uint8)
     h,w,c = img_cv2.shape
     cpu_face_det_model = mlu_face_det_inference(weights='weights/face_det/mobilenet0.25_Final.pth',use_mlu=False,use_jit=False)
-    detss = cpu_face_det_model.execute(img_cv2,dst_size=[w,h])
-    if len(detss) > 0:
-        print(detss[0].shape,detss[0])
+    cpu_detss = cpu_face_det_model.execute(img_cv2,dst_size=[w,h])
+    if len(cpu_detss) > 0:
+        print(cpu_detss[0].shape,cpu_detss[0])
 
-    mlu_face_det_model = mlu_face_det_inference(weights='./retinaface_mlu_int8.pth', use_mlu=True,
+    mlu_face_det_model = mlu_face_det_inference(weights='weights/face_det/retinaface_mlu_int8.pth', use_mlu=True,
                                                 use_jit=True)
-    detss = mlu_face_det_model.execute(img_cv2,dst_size=[w,h])
-    if len(detss) > 0:
-        print(detss[0].shape,detss[0])
+    mlu_detss = mlu_face_det_model.execute(img_cv2,dst_size=[w,h])
+    if len(mlu_detss) > 0:
+        print(mlu_detss[0].shape,mlu_detss[0])
 
 
-    exit(0)
-    img_cv2 = cv2.imread('test.jpg')
+    # exit(0)
+    # img_cv2 = cv2.imread('test.jpg')
+    # using detss[0] because only 1 image is used for test. (ith image from batch image)
+    cpu_face_images = crop_face_from_bbox(img_cv2,dets=cpu_detss[0])
+    mlu_face_images = crop_face_from_bbox(img_cv2,dets=mlu_detss[0])
+
+    #in this test only one face can be extracted from the image
+    cpu_face_image = cpu_face_images[0]
+    mlu_face_image = mlu_face_images[0]
+
     mlu_face_model = mlu_face_rec_inference(weights='weights/face_rec/resnet101_mlu_int8.pth',use_mlu=True,use_jit=True)
     cpu_face_model = mlu_face_rec_inference(weights='weights/face_rec/r101irse_model_3173.pth',use_mlu=False,use_jit=False)
 
-    mlu_face_feature = mlu_face_model.execute(img_cv2)
-    cpu_face_feature = cpu_face_model.execute(img_cv2)
+    mlu_face_feature = mlu_face_model.execute(mlu_face_image)
+    cpu_face_feature = cpu_face_model.execute(cpu_face_image)
 
     mlu_face_feature = normalize(mlu_face_feature,axis=1)
     cpu_face_feature = normalize(cpu_face_feature,axis=1)
