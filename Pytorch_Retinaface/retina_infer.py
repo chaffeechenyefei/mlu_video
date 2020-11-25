@@ -275,6 +275,7 @@ class RetinaFaceDet(object):
         self.device = torch.device("cpu" if use_cpu else "cuda")
         self.net = RetinaFace(cfg=self.cfg,phase="test",backbone_location=backbone_location)
         if loading:
+            print('No model path exist!') if not os.path.exists(model_path) else None
             self.loading()
 
         self._priors = None
