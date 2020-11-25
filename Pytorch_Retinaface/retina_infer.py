@@ -306,7 +306,68 @@ class RetinaFaceDet(object):
             priorbox = PriorBox(self.cfg,image_size=(self.im_height,self.im_width))
             self._priors = priorbox.forward()
 
-    def execute_batch(self,img_batch,threshold=0.6,topk=5000,keep_topk=750,nms_threshold=0.7):
+    @torch.no_grad()
+    def execute_batch_mlu(self,net_output,batch_shape,threshold=0.8,topk=5000,keep_topk=750,nms_threshold=0.2):
+        locs,confs,landmss = net_output
+        nB, nCh, im_height, im_width = batch_shape
+        scale = torch.Tensor([im_width, im_height]*2)
+        scale1 = torch.Tensor([im_width, im_height] * 5)
+
+        detss = []
+
+        if im_height == self.im_height and im_width == self.im_width and self._priors is not None:
+            pass
+        else:
+            self.set_default_size([im_height, im_width, nCh])
+
+        priors = self._priors.unsqueeze(dim=0)
+
+        boxes = batch_decode(locs, priors, self.cfg['variance'])
+        boxes = boxes * scale
+
+        scores = confs[:, :, 1]
+
+        landms = batch_decode_landm(landmss, priors, self.cfg['variance'])
+        landms = landms * scale1
+
+        landms = landms.data.cpu().numpy()
+        scores = scores.data.cpu().numpy()
+        boxes = boxes.data.cpu().numpy()
+
+        for n in range(nB):
+            _landms = landms[n]
+            _scores = scores[n]
+            _boxes = boxes[n]
+
+            # ignore low scores
+            inds = np.where(_scores > threshold)[0]
+            _boxes = _boxes[inds]
+            _landms = _landms[inds]
+            _scores = _scores[inds]
+
+            # keep top-K before NMS
+            order = _scores.argsort()[::-1][:topk]
+            _boxes = _boxes[order]
+            _landms = _landms[order]
+            _scores = _scores[order]
+
+            # do NMS
+            dets = np.hstack((_boxes, _scores[:, np.newaxis])).astype(np.float32, copy=False)
+            keep = py_cpu_nms(dets, nms_threshold)
+            dets = dets[keep, :]
+            _landms = _landms[keep]
+
+            # keep top-K faster NMS
+            dets = dets[:keep_topk, :]
+            _landms = _landms[:keep_topk, :]
+            # x0,y0,x1,y1,score,landmarks...
+            dets = np.concatenate((dets, _landms), axis=1)
+            detss.append(dets)
+        return detss
+
+
+
+    def execute_batch(self,img_batch,threshold=0.8,topk=5000,keep_topk=750,nms_threshold=0.2):
         resize = 1
         with torch.no_grad():
             img_batch = img_batch.to(self.device)
@@ -788,10 +849,6 @@ def _format(img_cv2, format_size=112):
 
 
 def _normalize_retinaface(img_cv2,mlu=False):
-    # img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
-    # mean = [123.675, 116.28, 103.53]
-    # std = [58.395, 57.12, 57.375]
-    img_cv2 = cv2.resize(img_cv2,dsize=(512,512))
     img_data = np.asarray(img_cv2, dtype=np.float32)
     if mlu:
         return img_data #[0,255]
@@ -802,8 +859,7 @@ def _normalize_retinaface(img_cv2,mlu=False):
     return img_data
 
 def preprocess_retinaface(img_cv2, mlu=False):
-    img_format = _format(img_cv2)
-    img_data = _normalize_retinaface(img_format,mlu=mlu)
+    img_data = _normalize_retinaface(img_cv2,mlu=mlu)
     img_data = np.transpose(img_data, axes=[2, 0, 1])
     img_data = np.expand_dims(img_data, axis=0)
     img_t = torch.from_numpy(img_data)
@@ -827,20 +883,46 @@ if __name__ == '__main__':
     args.cpu = True
     # cudnn.benchmark = True
     faceDet = RetinaFaceDet(args.network,args.trained_model,use_cpu=args.cpu)
-    faceDet.set_default_size([512,512,3])
     model = faceDet.net
 
     with torch.no_grad():
-        image_path = "/Users/marschen/Ucloud/Project/git/mlu_videofacerec/Pytorch_Retinaface/5ea952c344c2683545af4566_1.jpg"
+        image_path = "/Users/marschen/Ucloud/Project/git/mlu_videofacerec/Pytorch_Retinaface/sally.jpg"
         img_cv = cv2.imread(image_path)
-        img_cv = preprocess_retinaface(img_cv,mlu=False)
+        img_cv2 = preprocess_retinaface(img_cv,mlu=False)
 
-        loc,conf,landms = model(img_cv)
+        b,nch,h,w = img_cv2.shape
 
-        conf = conf.data.cpu().numpy()
-        print(conf.shape)
-        s = conf.max()
-        print(s)
+        loc,conf,landms = model(img_cv2)
+        print(loc.shape,conf.shape,landms.shape)
+        net_ouput = [loc,conf,landms]
+        batch_shape = [b,nch,h,w]
+
+        dets = faceDet.execute_batch_mlu(net_output=net_ouput,batch_shape=batch_shape)
+        print(len(dets))
+        print(dets[0])
+        print(dets[0].shape)
+
+        for det in dets:
+            for b in det:
+
+                text = "{:.4f}".format(b[4])
+                b = list(map(int, b))
+                cv2.rectangle(img_cv, (b[0], b[1]), (b[2], b[3]), (0, 0, 255), 2)
+                cx = b[0]
+                cy = b[1] + 12
+                cv2.putText(img_cv, text, (cx, cy),
+                            cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
+
+                # landms
+                cv2.circle(img_cv, (b[5], b[6]), 1, (0, 0, 255), 4)
+                cv2.circle(img_cv, (b[7], b[8]), 1, (0, 255, 255), 4)
+                cv2.circle(img_cv, (b[9], b[10]), 1, (255, 0, 255), 4)
+                cv2.circle(img_cv, (b[11], b[12]), 1, (0, 255, 0), 4)
+                cv2.circle(img_cv, (b[13], b[14]), 1, (255, 0, 0), 4)
+
+            name = "det_result.jpg"
+            cv2.imwrite(name, img_cv)
+
     # dtimes = {}
     # for imgname in imglst:
     #     imgname = '人工智能部-袁亮_0001.jpg'
