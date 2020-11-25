@@ -76,7 +76,7 @@ def _normalize_retinaface(img_cv2,dst_size=[480,640],mlu=False):
     ratio = out_data['ratio']
     img_data = np.asarray(img_cv2, dtype=np.float32)
     if mlu:
-        return img_data #[0,255]
+        return img_data,ratio #[0,255]
     else:
         mean = (104, 117, 123)
         img_data = img_data - mean
