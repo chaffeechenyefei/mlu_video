@@ -161,7 +161,8 @@ class mlu_face_det_inference(object):
 
         detss = []
         for n,det in enumerate(dets):
-            det = det*ratio[n]
+            det = det/ratio[n]
+            det[:,4] = det[:,4]*ratio[n]
             detss.append(det)
         return detss
 
