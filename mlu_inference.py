@@ -266,13 +266,13 @@ if __name__ == "__main__":
     cpu_face_det_model = mlu_face_det_inference(weights='weights/face_det/mobilenet0.25_Final.pth',use_mlu=False,use_jit=False)
     detss = cpu_face_det_model.execute(img_cv2,dst_size=[w,h])
     if len(detss) > 0:
-        print(detss[0])
+        print(detss[0].shape,detss[0])
 
     mlu_face_det_model = mlu_face_det_inference(weights='./retinaface_mlu_int8.pth', use_mlu=True,
                                                 use_jit=True)
     detss = mlu_face_det_model.execute(img_cv2,dst_size=[w,h])
     if len(detss) > 0:
-        print(detss[0])
+        print(detss[0].shape,detss[0])
 
 
     exit(0)
