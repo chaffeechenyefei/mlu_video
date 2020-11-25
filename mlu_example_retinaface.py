@@ -157,7 +157,7 @@ if __name__ == '__main__':
     loading = True if not args.mlu else False
     model_path = 'weights/face_det/mobilenet0.25_Final.pth'
     model_path = os.path.abspath(model_path)
-    infer = RetinaFaceDet(model_path=,use_cpu=True,loading=False)
+    infer = RetinaFaceDet(model_path=model_path,use_cpu=True,loading=False)
     print('==end==')
 
     if not args.mlu:
