@@ -259,16 +259,20 @@ class mlu_face_rec_inference(object):
 
 if __name__ == "__main__":
     print('just a usage example')
-    img_cv2 = cv2.imread('sally.jpg')
+    # img_cv2 = cv2.imread('sally.jpg')
+    img_cv2 = np.random.random((640,480,3))*255
+    img_cv2 = img_cv2.astype(np.uint8)
     h,w,c = img_cv2.shape
     cpu_face_det_model = mlu_face_det_inference(weights='weights/face_det/mobilenet0.25_Final.pth',use_mlu=False,use_jit=False)
     detss = cpu_face_det_model.execute(img_cv2,dst_size=[w,h])
-    print(detss[0])
+    if len(detss) > 0:
+        print(detss[0])
 
     mlu_face_det_model = mlu_face_det_inference(weights='./retinaface_mlu_int8.pth', use_mlu=True,
                                                 use_jit=True)
     detss = mlu_face_det_model.execute(img_cv2,dst_size=[w,h])
-    print(detss[0])
+    if len(detss) > 0:
+        print(detss[0])
 
 
     exit(0)
