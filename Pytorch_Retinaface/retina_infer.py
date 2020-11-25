@@ -775,6 +775,38 @@ def display_time(avg_time: dict):
             avg_time[key] = []
             print('%s: %1.3f secs' % (key, avg_used_time))
 
+def _format(img_cv2, format_size=112):
+    org_h, org_w = img_cv2.shape[0:2]
+    rescale_ratio = format_size / max(org_h, org_w)
+    h, w = int(org_h * rescale_ratio), int(org_w * rescale_ratio)
+    img_rescaled = cv2.resize(img_cv2, (w, h))
+    paste_pos = [int((format_size - w) / 2), int((format_size - h) / 2)]
+    img_format = np.zeros((format_size, format_size, 3), dtype=np.uint8)
+    img_format[paste_pos[1]:paste_pos[1] + h, paste_pos[0]:paste_pos[0] + w] = img_rescaled
+    return img_format
+
+
+def _normalize_retinaface(img_cv2,mlu=False):
+    # img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
+    # mean = [123.675, 116.28, 103.53]
+    # std = [58.395, 57.12, 57.375]
+    img_cv2 = cv2.resize(img_cv2,dsize=(512,512))
+    img_data = np.asarray(img_cv2, dtype=np.float32)
+    if mlu:
+        return img_data #[0,255]
+    else:
+        mean = (104, 117, 123)
+        img_data = img_data - mean
+        img_data = img_data.astype(np.float32) #[0,1] normalized
+    return img_data
+
+def preprocess_retinaface(img_cv2, mlu=False):
+    img_format = _format(img_cv2)
+    img_data = _normalize_retinaface(img_format,mlu=mlu)
+    img_data = np.transpose(img_data, axes=[2, 0, 1])
+    img_data = np.expand_dims(img_data, axis=0)
+    img_t = torch.from_numpy(img_data)
+    return img_t
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Retinaface')
@@ -794,23 +826,29 @@ if __name__ == '__main__':
     args.cpu = True
     # cudnn.benchmark = True
     faceDet = RetinaFaceDet(args.network,args.trained_model,use_cpu=args.cpu)
-    faceDet.set_default_size([640,460,3])
+    faceDet.set_default_size([512,512,3])
+    model = faceDet.net
 
+    with torch.no_grad():
+        image_path = "/Users/marschen/Ucloud/Project/git/mlu_videofacerec/Pytorch_Retinaface/5ea952c344c2683545af4566_1.jpg"
+        img_cv = cv2.imread(image_path)
+        img_cv = preprocess_retinaface(img_cv,mlu=False)
 
+        loc,conf,landms = model(img_cv)
 
-    image_path = "/Users/marschen/Ucloud/Data/"
-    imglst = os.listdir(image_path)
-    imglst = [ c for c in imglst if c.endswith('.jpg')]
-
-    dtimes = {}
-    for imgname in imglst:
-        imgname = '人工智能部-袁亮_0001.jpg'
-        imgfullname0 = pj(image_path,imgname)
-        # imgfullname1 = pj(image_path, imgname1)
-        img_raw0 = cv2.imread(imgfullname0, cv2.IMREAD_COLOR)
-        print(img_raw0.shape)
-        img_raw0 = cv2.resize(img_raw0,(640,460))
-        print(img_raw0.shape)
+        conf = conf.data.cpu().numpy()
+        print(conf.shape)
+        s = conf.max()
+        print(s)
+    # dtimes = {}
+    # for imgname in imglst:
+    #     imgname = '人工智能部-袁亮_0001.jpg'
+    #     imgfullname0 = pj(image_path,imgname)
+    #     # imgfullname1 = pj(image_path, imgname1)
+    #     img_raw0 = cv2.imread(imgfullname0, cv2.IMREAD_COLOR)
+    #     print(img_raw0.shape)
+    #     img_raw0 = cv2.resize(img_raw0,(640,460))
+    #     print(img_raw0.shape)
         # img_raw00 = format_det_img(img_raw0)
         # img_raw1 = cv2.imread(imgfullname1, cv2.IMREAD_COLOR)
         # img_raw1 = cv2.resize(img_raw1, (1920//2, 1080//2))
@@ -824,43 +862,43 @@ if __name__ == '__main__':
         # print(loc.shape,conf.shape,landms.shape)
 
 
-        dets,dtime = faceDet.execute_debug(img_raw0, threshold=0.75, topk=args.top_k, keep_topk=args.keep_top_k,
-                               nms_threshold=args.nms_threshold)
+        # dets,dtime = faceDet.execute_debug(img_raw0, threshold=0.75, topk=args.top_k, keep_topk=args.keep_top_k,
+        #                        nms_threshold=args.nms_threshold)
 
-        print(dets)
-
-        # show image
-        if args.save_image:
-            for b in dets:
-                if b[4] < args.vis_thres:
-                    continue
-                text = "{:.4f}".format(b[4])
-                b = list(map(int, b))
-                cv2.rectangle(img_raw0, (b[0], b[1]), (b[2], b[3]), (0, 0, 255), 2)
-                cx = b[0]
-                cy = b[1] + 12
-                cv2.putText(img_raw0, text, (cx, cy),
-                            cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
-
-                # landms
-                cv2.circle(img_raw0, (b[5], b[6]), 2, (0, 0, 255), 4)
-                cv2.circle(img_raw0, (b[7], b[8]), 2, (0, 255, 255), 4)
-                cv2.circle(img_raw0, (b[9], b[10]), 2, (255, 0, 255), 4)
-                cv2.circle(img_raw0, (b[11], b[12]), 2, (0, 255, 0), 4)
-                cv2.circle(img_raw0, (b[13], b[14]), 2, (255, 0, 0), 4)
-            # save image
-
-            savename = pj(image_path, 'result', imgname)
-            cv2.imwrite(savename, img_raw0)
-
-        for k in dtime.keys():
-            if k in dtimes.keys():
-                dtimes[k] += dtime[k]
-            else:
-                dtimes[k] = dtime[k]
-
-        break
-
-
-    display_time(dtimes)
+    #     print(dets)
+    #
+    #     # show image
+    #     if args.save_image:
+    #         for b in dets:
+    #             if b[4] < args.vis_thres:
+    #                 continue
+    #             text = "{:.4f}".format(b[4])
+    #             b = list(map(int, b))
+    #             cv2.rectangle(img_raw0, (b[0], b[1]), (b[2], b[3]), (0, 0, 255), 2)
+    #             cx = b[0]
+    #             cy = b[1] + 12
+    #             cv2.putText(img_raw0, text, (cx, cy),
+    #                         cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
+    #
+    #             # landms
+    #             cv2.circle(img_raw0, (b[5], b[6]), 2, (0, 0, 255), 4)
+    #             cv2.circle(img_raw0, (b[7], b[8]), 2, (0, 255, 255), 4)
+    #             cv2.circle(img_raw0, (b[9], b[10]), 2, (255, 0, 255), 4)
+    #             cv2.circle(img_raw0, (b[11], b[12]), 2, (0, 255, 0), 4)
+    #             cv2.circle(img_raw0, (b[13], b[14]), 2, (255, 0, 0), 4)
+    #         # save image
+    #
+    #         savename = pj(image_path, 'result', imgname)
+    #         cv2.imwrite(savename, img_raw0)
+    #
+    #     for k in dtime.keys():
+    #         if k in dtimes.keys():
+    #             dtimes[k] += dtime[k]
+    #         else:
+    #             dtimes[k] = dtime[k]
+    #
+    #     break
+    #
+    #
+    # display_time(dtimes)
 

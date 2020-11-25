@@ -2,4 +2,6 @@
 *.jpg
 .idea/
 .DS_Store
+weights/
+
 

@@ -155,7 +155,7 @@ if __name__ == '__main__':
     print('==pytorch==')
     use_device = 'cpu'
     loading = True if not args.mlu else False
-    infer = RetinaFaceDet(use_cpu=True,loading=False)
+    infer = RetinaFaceDet(model_path='./weights/face_det/mobilenet0.25_Final.pth',use_cpu=True,loading=False)
     print('==end==')
 
     if not args.mlu:
