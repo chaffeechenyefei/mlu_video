@@ -108,7 +108,7 @@ class mlu_face_det_inference(object):
             model = model.to(ct.mlu_device())
             if use_jit:
                 print('==jit==')
-                randinput = torch.rand(1,3,112,112)*255
+                randinput = torch.rand(1,3,640,480)*255
                 randinput = randinput.to(ct.mlu_device())
                 traced_model = torch.jit.trace(model, randinput, check_trace=False)
                 self.model = traced_model
@@ -260,9 +260,16 @@ class mlu_face_rec_inference(object):
 if __name__ == "__main__":
     print('just a usage example')
     img_cv2 = cv2.imread('sally.jpg')
+    h,w,c = img_cv2.shape
     cpu_face_det_model = mlu_face_det_inference(weights='weights/face_det/mobilenet0.25_Final.pth',use_mlu=False,use_jit=False)
-    detss = cpu_face_det_model.execute(img_cv2)
+    detss = cpu_face_det_model.execute(img_cv2,dst_size=[w,h])
     print(detss[0])
+
+    mlu_face_det_model = mlu_face_det_inference(weights='./retinaface_mlu_int8.pth', use_mlu=True,
+                                                use_jit=True)
+    detss = mlu_face_det_model.execute(img_cv2,dst_size=[w,h])
+    print(detss[0])
+
 
     exit(0)
     img_cv2 = cv2.imread('test.jpg')
