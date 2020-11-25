@@ -155,7 +155,6 @@ class mlu_face_det_inference(object):
         dets = self.infer.execute_batch_mlu(net_output=net_output, batch_shape=data.shape,
                                             threshold=threshold,topk=topk,keep_topk=keep_topk,
                                             nms_threshold=nms_threshold)
-        scale = 1.3 #expanding bbox for better feature extraction
 
         assert len(dets) == len(ratio), 'Err len(dets) != len(ratio)'
 
