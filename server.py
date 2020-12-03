@@ -12,9 +12,7 @@ import cv2
 import traceback                                                                                                                                                                                                     
 from pathlib import Path                                                                                                                                                                                             
 from PIL import Image                                                                                                                                                                                                
-import torch                                                                                                                                                                                                         
-                                                                                                                                                                                                                     
-app = Flask(__name__)                                                                                                                                                                                                
+import torch                                                                                                                                                                                                         app = Flask(__name__)                                                                                                                                                                                                
                                                                                                                                                                                                                      
 cv2.useOptimized()                                                                                                                                                                                                   
                                                                                                                                                                                                                      
@@ -60,14 +58,14 @@ def detect():
         else:
             pos = res[0]
             scale = 1.3
-            jew_pos = []
+            new_pos = []
             for b in pos:
                 b = list(map(int, b))
                 pwidth = int((b[2] - b[0]) * scale)
                 pheight = int((b[3] - b[1]) * scale)
                 pcx = int((b[2] + b[0]) / 2)
                 pcy = int((b[3] + b[1]) / 2)
-                new_pos.append([pwidth, pheight, pcx-pwidth/2, pcy - pheight/2])
+                new_pos.append([pwidth, pheight, int(pcx-pwidth/2), int(pcy - pheight/2)])
             return jsonify({'code':0, 'data': [json.dumps({'bbox': new_pos})]})
     except Exception as e:
         traceback.print_exc(e)
