@@ -23,7 +23,8 @@ cv2.useOptimized()
 if os.environ['MODE'] == 'cpu':
     detect_algo = mlu_face_det_inference(weights='/root/weights/face_det/mobilenet0.25_Final.pth',use_mlu=False,use_jit=True)
 else:
-    detect_algo = mlu_face_det_inference(weights='./weights/face_det/retinaface_mlu_int8.pth', use_mlu=True, use_jit=True)
+    detect_algo = mlu_face_det_inference(weights='/root/weights/face_det/retinaface_mlu_int8.pth', use_mlu=True, use_jit=True)
+
 # cpu 
 #cpu_detss = cpu_face_det_model.execute(img_cv2,dst_size=[w,h])
 #if len(cpu_detss) > 0:
@@ -37,7 +38,7 @@ else:
 if os.environ['MODE'] == 'cpu':
     rec_algo = mlu_face_rec_inference(weights='/root/weights/face_rec/r101irse_model_3173.pth',use_mlu=False,use_jit=True)
 else:
-    rec_algo = mlu_face_rec_inference(weights='./weights/face_rec/resnet101_mlu_int8.pth',use_mlu=True,use_jit=True)
+    rec_algo = mlu_face_rec_inference(weights='/root/weights/face_rec/resnet101_mlu_int8.pth',use_mlu=True,use_jit=True)
                                              
 def read64(encoded_data):                                                                                                                                                                                            
    nparr = np.fromstring(base64.b64decode(encoded_data), np.uint8)                                                                                                                                                   
