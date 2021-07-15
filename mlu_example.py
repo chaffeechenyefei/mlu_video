@@ -8,6 +8,7 @@ sys.path.append(pj(curPath,'FaceRecog'))
 # sys.path.append(pj(curPath,'Pytorch_Retinaface'))
 
 import torch
+import time
 import torch.nn as nn
 import torchvision
 # from torchvision.models.quantization.utils import quantize_model
@@ -61,6 +62,14 @@ def _normalize(img_cv2,mlu=False):
 
 def preprocess(img_cv2, mlu=False):
     img_format = _format(img_cv2)
+    img_data = _normalize(img_format,mlu=mlu)
+    img_data = np.transpose(img_data, axes=[2, 0, 1])
+    img_data = np.expand_dims(img_data, axis=0)
+    img_t = torch.from_numpy(img_data)
+    return img_t
+
+def preprocessv2(img_cv2, mlu=False):
+    img_format = cv2.resize(img_cv2,(112,112))
     img_data = _normalize(img_format,mlu=mlu)
     img_data = np.transpose(img_data, axes=[2, 0, 1])
     img_data = np.expand_dims(img_data, axis=0)
@@ -132,13 +141,17 @@ if __name__ == '__main__':
     print("batch_size is {}, core number is {}".format(args.batch_size, args.core_number))
 
     image_list = [ pj(args.data,c) for c in os.listdir(args.data) if c.endswith(args.ext) ]
+    image_list = [
+        '/project/data/tupu/5ea5090844c2683545aa564f_0.jpg'
+    ]
     K = min([len(image_list),args.batch_size])
     # image_list = random.sample(image_list,K)
     image_list = image_list[:K]
     print('sampled %d data'%len(image_list))
 
     input_img = [cv2.imread(c) for c in image_list]
-    data = [preprocess(c , mlu=args.mlu) for c in input_img]
+    # data = [preprocess(c , mlu=args.mlu) for c in input_img]
+    data = [preprocessv2(c, mlu=args.mlu) for c in input_img]
     print('len of data: %d'%len(data))
     #print('data:',data)
     data = torch.cat(data,dim=0)
@@ -172,13 +185,14 @@ if __name__ == '__main__':
         mean = [0.5, 0.5, 0.5]
         std = [0.5, 0.5, 0.5]
         use_avg = False if data.shape[0] == 1 else True
-        qconfig = {'iteration':data.shape[0], 'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False}
+        qconfig = {'iteration':data.shape[0], 'use_avg':use_avg,
+                   'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False, 'firstconv':True}
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
         #print(model_quantized)
         #print('data:',data)
         print('data.shape=',data.shape)
         output = model_quantized(data)
-        torch.save(model_quantized.state_dict(), "./resnet101_mlu_int8.pth")
+        torch.save(model_quantized.state_dict(), "./weights/face_rec/resnet101_mlu_int8.pth")
         print("Resnet101 int8 quantization end!")
         if args.half_input:
             output = output.cpu().type(torch.FloatTensor)
@@ -191,8 +205,11 @@ if __name__ == '__main__':
         if not args.mlu:
             print('doing cpu inference')
             with torch.no_grad():
+                bgt = time.time()
                 out = model(data)
                 out = out.data.cpu().numpy().reshape(-1,512)
+                timing = time.time() - bgt
+                print('using {:.3f}s per img'.format(timing/K))
                 np.save('cpu_out.npy',out)
             # np.savetxt("cpu_out.txt", out.cpu().detach().numpy().reshape(-1,1), fmt='%.6f')
             print("run cpu finish!")
@@ -200,7 +217,7 @@ if __name__ == '__main__':
             print('doing mlu inference')
             # model = quantize_model(model, inplace=True)
             model = mlu_quantize.quantize_dynamic_mlu(model)
-            checkpoint = torch.load('./resnet101_mlu_int8.pth', map_location='cpu')
+            checkpoint = torch.load('./weights/face_rec/resnet101_mlu_int8.pth', map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             # model.eval().float()
             model = model.to(ct.mlu_device())
@@ -211,8 +228,11 @@ if __name__ == '__main__':
                 traced_model = torch.jit.trace(model, randinput, check_trace=False)
                 # print(traced_model.graph)
                 print('start inference')
+                bgt = time.time()
                 out = traced_model(data)
                 print('end inference')
+                timing = time.time() - bgt
+                print('using {:.3f}s per img'.format(timing / K))
                 if args.half_input:
                     out = out.cpu().type(torch.FloatTensor)
                 else:
@@ -223,8 +243,11 @@ if __name__ == '__main__':
                 print("run mlu fusion finish!")
             else:
                 print('using layer by layer inference')
+                bgt = time.time()
                 out = model(data)
                 print('done')
+                timing = time.time() - bgt
+                print('using {:.3f}s per img'.format(timing / K))
                 if args.half_input:
                     out = out.cpu().type(torch.FloatTensor)
                 else:

@@ -217,12 +217,12 @@ class EvalTupu(object):
 def main(data_dir, use_mlu = False, use_jit=False ,use_TTA = False, **kwargs):
     backbone_type = 'resnet101_irse_mx'
     if use_mlu:
-        ckpt_fpath = 'resnet101_mlu_int8.pth'
+        ckpt_fpath = 'weights/face_rec/resnet101_mlu_int8.pth'
     else:
         ckpt_fpath = 'weights/face_rec/r101irse_model_3173.pth'
 
     if data_dir is None:
-        data_dir = '/data/data/evaluation/valid_labeled_faces'
+        data_dir = '/project/data/valid_labeled_faces'
 
     infer_model = mlu_face_rec_inference(weights=ckpt_fpath,model_name=backbone_type,use_mlu=use_mlu,use_jit=use_jit)
     eval = EvalTupu(data_dir=data_dir, use_TTA=use_TTA)
