@@ -175,13 +175,15 @@ if __name__ == '__main__':
         mean = [ 104 / 255, 117 / 255, 123 / 255]
         std = [1/255,1/255,1/255]
         use_avg = False if data.shape[0] == 1 else True
-        qconfig = {'iteration':data.shape[0], 'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False}
+        qconfig = {'iteration':data.shape[0],
+                   'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std,
+                   'per_channel':False, 'firstconv':True}
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
         #print(model_quantized)
         #print('data:',data)
         print('data.shape=',data.shape)
         locs, confs, landmss = model_quantized(data)
-        torch.save(model_quantized.state_dict(), "./retinaface_mlu_int8.pth")
+        torch.save(model_quantized.state_dict(), "./weights/face_det/retinaface_mlu_int8.pth")
         print("Retinaface int8 quantization end!")
         _locs = fetch_cpu_data(locs,args.half_input)
         _confs = fetch_cpu_data(confs,args.half_input)
@@ -209,7 +211,7 @@ if __name__ == '__main__':
             print('doing mlu inference')
             # model = quantize_model(model, inplace=True)
             model = mlu_quantize.quantize_dynamic_mlu(model)
-            checkpoint = torch.load('./retinaface_mlu_int8.pth', map_location='cpu')
+            checkpoint = torch.load('./weights/face_det/retinaface_mlu_int8.pth', map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             # model.eval().float()
             model = model.to(ct.mlu_device())

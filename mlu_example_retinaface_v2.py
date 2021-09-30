@@ -4,11 +4,10 @@ curPath = os.path.abspath(os.path.dirname(__file__))
 rootPath = os.path.split(curPath)[0]
 sys.path.append(rootPath)
 sys.path.append(curPath)
-sys.path.append(pj(curPath,'FaceRecog'))
-# sys.path.append(pj(curPath,'Pytorch_Retinaface'))
+# sys.path.append(pj(curPath,'FaceRecog'))
+sys.path.append(pj(curPath,'Pytorch_Retinaface'))
 
 import torch
-import time
 import torch.nn as nn
 import torchvision
 # from torchvision.models.quantization.utils import quantize_model
@@ -19,10 +18,8 @@ import argparse
 import cv2
 import numpy as np
 import random,math
-from sklearn.preprocessing import normalize
-from cfg import model_dict
-from FaceRecog.eval_utils.inference_api import Inference
-# from Pytorch_Retinaface.retina_infer import RetinaFaceDet
+from Pytorch_Retinaface.retina_infer import RetinaFaceDetModule
+# from Pytorch_Retinaface.retina_infer import RetinaFaceDetModuleNMS
 
 "python XXX.py --mlu false  --quantization true"
 
@@ -41,46 +38,60 @@ def _format(img_cv2, format_size=112):
     img_format[paste_pos[1]:paste_pos[1] + h, paste_pos[0]:paste_pos[0] + w] = img_rescaled
     return img_format
 
+def resize(img_cv2, dst_size):
+    dst_img = np.zeros([dst_size[1],dst_size[0],3], np.uint8)
+    h,w = img_cv2.shape[:2]
+    dst_w,dst_h = dst_size
+    aspect_ratio_w = dst_w/w
+    aspect_ratio_h = dst_h/h
+    aspect_ratio = min([aspect_ratio_h,aspect_ratio_w])
 
-def _normalize(img_cv2,mlu=False):
-    img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
+    _h = min([ int(h*aspect_ratio),dst_h])
+    _w = min([ int(w*aspect_ratio),dst_w])
+    _tmp_img = cv2.resize(img_cv2,dsize=(_w,_h))
+    dst_img[:_h,:_w] = _tmp_img[:,:]
+
+    return dst_img, aspect_ratio
+
+
+def _normalize_retinaface(img_cv2,mlu=False):
+    # img_cv2 = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
     # mean = [123.675, 116.28, 103.53]
     # std = [58.395, 57.12, 57.375]
     img_data = np.asarray(img_cv2, dtype=np.float32)
-
-
     if mlu:
         return img_data #[0,255]
     else:
-        mean = 0.5
-        std = 0.5
-        img_data /= 255
+        mean = (104, 117, 123)
         img_data = img_data - mean
-        img_data = img_data / std
         img_data = img_data.astype(np.float32) #[0,1] normalized
     return img_data
 
-def preprocess(img_cv2, mlu=False):
-    img_format = _format(img_cv2)
-    img_data = _normalize(img_format,mlu=mlu)
+def preprocess_retinaface(img_cv2, dst_size=[1024,720],mlu=False):
+    """
+    :param img_cv2: 
+    :param img_size: [w,h]
+    :param mlu: 
+    :return: 
+    """
+    resized_img, aspect_ratio = resize(img_cv2, dst_size=dst_size)
+    resized_img_copy = resized_img.copy()
+    img_data = _normalize_retinaface(resized_img ,mlu=mlu)
     img_data = np.transpose(img_data, axes=[2, 0, 1])
     img_data = np.expand_dims(img_data, axis=0)
     img_t = torch.from_numpy(img_data)
-    return img_t
+    return img_t, resized_img_copy, aspect_ratio
 
-def preprocessv2(img_cv2, mlu=False):
-    img_format = cv2.resize(img_cv2,(112,112))
-    img_data = _normalize(img_format,mlu=mlu)
-    img_data = np.transpose(img_data, axes=[2, 0, 1])
-    img_data = np.expand_dims(img_data, axis=0)
-    img_t = torch.from_numpy(img_data)
-    return img_t
-
+def fetch_cpu_data(x,use_half_input=False):
+    if use_half_input:
+        output = x.cpu().type(torch.FloatTensor)
+    else:
+        output = x.cpu()
+    return output.detach().numpy()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--check',action='store_true',help='result will be compared only...')
-    parser.add_argument('--model_name', default='resnet101_irse_mx')
     parser.add_argument('--data',help='data path to the images used for quant')
     parser.add_argument('--ext',default='.jpg')
 
@@ -111,27 +122,28 @@ if __name__ == '__main__':
                         default=1, type=int)
     args = parser.parse_args()
 
+    # IMG_SIZE=[736,416] #[w,h]
+    IMG_SIZE=[736,416]
+
     if args.check:
-        pytorch_result = np.load('cpu_out.npy')
-        mlu_result = np.load('mlu_out.npy')
-        cpu_quant_result = np.load('cpu_quant_out.npy')
-        # mlu_jit_result = np.load('mlu_out_jit.npy')
+        pytorch_loc = np.load('cpu_pred.npy')
+        mlu_loc = np.load('mlu_pred.npy')
+        # cpu_quant_loc = np.load('cpu_quant_pred.npy')
 
-        print('shapes:',pytorch_result.shape,mlu_result.shape)#,mlu_jit_result.shape)
-        B = pytorch_result.shape[0]
-        assert B == mlu_result.shape[0], 'Err!!!'
+        B = pytorch_loc.shape[0]
+        assert B == mlu_loc.shape[0], 'Err!!!'
 
-        diff1 = pytorch_result - mlu_result
+        diff1 = pytorch_loc - mlu_loc
         diff1 = math.sqrt((diff1**2).sum()) / B
         print('mean instance difference: %f' % diff1)
 
         # diff2 = pytorch_result - mlu_jit_result
         # diff2 = math.sqrt((diff2**2).sum()) / B
         # print('mean instance difference: %f' % diff2)
-
-        diff3 = pytorch_result - cpu_quant_result
-        diff3 = math.sqrt((diff3**2).sum()) / B
-        print('mean instance difference: %f' % diff3)
+        #
+        # diff3 = pytorch_loc - cpu_quant_loc
+        # diff3 = math.sqrt((diff3**2).sum()) / B
+        # print('mean instance difference: %f' % diff3)
 
         exit(0)
 
@@ -141,19 +153,15 @@ if __name__ == '__main__':
     print("batch_size is {}, core number is {}".format(args.batch_size, args.core_number))
 
     image_list = [ pj(args.data,c) for c in os.listdir(args.data) if c.endswith(args.ext) ]
-    # image_list = [
-    #     '/project/data/tupu/5ea5090844c2683545aa564f_0.jpg'
-    # ]
     K = min([len(image_list),args.batch_size])
-    # image_list = random.sample(image_list,K)
     image_list = image_list[:K]
     print('sampled %d data'%len(image_list))
+    print(image_list[0])
 
     input_img = [cv2.imread(c) for c in image_list]
-    # data = [preprocess(c , mlu=args.mlu) for c in input_img]
-    data = [preprocessv2(c, mlu=args.mlu) for c in input_img]
+    data = [preprocess_retinaface(c , dst_size=IMG_SIZE , mlu=args.mlu) for c in input_img]
+    data = [c[0] for c in data]
     print('len of data: %d'%len(data))
-    #print('data:',data)
     data = torch.cat(data,dim=0)
     print('data shape =',data.shape)
 
@@ -165,95 +173,77 @@ if __name__ == '__main__':
     # model = torchvision.models.resnet50()
     print('==pytorch==')
     use_device = 'cpu'
-    backbone_type = args.model_name
-    model_type = model_dict[args.model_name]['weights']
-    model_pth = pj(model_dict[args.model_name]['path'], model_type)
-    model_pth = os.path.abspath(model_pth)
-    infer = Inference(backbone_type=backbone_type,
-                      ckpt_fpath=model_pth,
-                      device=use_device)
+    loading = True if not args.mlu else False
+    print('loading =',loading)
+    model_path = 'weights/face_det/mobilenet0.25_Final.pth'
+    model_path = os.path.abspath(model_path)
+    print(model_path)
+    infer = RetinaFaceDetModule(model_path=model_path,H=IMG_SIZE[1],W=IMG_SIZE[0],use_cpu=True,loading=loading)
+    # infer = RetinaFaceDetModuleNMS(model_path=model_path, use_cpu=True, loading=loading)
     print('==end==')
 
-    if not args.mlu:
-        model = infer.model
-        model.eval().float()
-    else:
-        model = infer._get_model()
+    model = infer.eval()
 
     if args.quantization:
         print('doing quantization on cpu')
-        mean = [0.5, 0.5, 0.5]
-        std = [0.5, 0.5, 0.5]
+        mean = [ 104 / 255, 117 / 255, 123 / 255]
+        std = [1/255,1/255,1/255]
         use_avg = False if data.shape[0] == 1 else True
-        qconfig = {'iteration':data.shape[0], 'use_avg':use_avg,
-                   'data_scale':1.0, 'mean':mean, 'std':std, 'per_channel':False, 'firstconv':True}
+        qconfig = {'iteration':data.shape[0],
+                   'use_avg':use_avg, 'data_scale':1.0, 'mean':mean, 'std':std,
+                   'per_channel':False, 'firstconv':True}
         model_quantized = mlu_quantize.quantize_dynamic_mlu(model, qconfig, dtype='int8', gen_quant = True)
         #print(model_quantized)
         #print('data:',data)
         print('data.shape=',data.shape)
-        output = model_quantized(data)
-        torch.save(model_quantized.state_dict(), "./weights/face_rec/resnet101_mlu_int8.pth")
-        print("Resnet101 int8 quantization end!")
-        if args.half_input:
-            output = output.cpu().type(torch.FloatTensor)
-        else:
-            output = output.cpu()
-        print('saving', output.shape)
-        np.save('cpu_quant_out.npy', output.detach().numpy().reshape(-1, 512))
+        preds = model_quantized(data)
+        torch.save(model_quantized.state_dict(), "./weights/face_det/retinaface_mlu_int8.pth")
+        print("Retinaface int8 quantization end!")
+        _preds = fetch_cpu_data(preds,args.half_input)
+
+
+        print('saving', _preds.shape)
+        np.save('cpu_quant_pred.npy', _preds)
+
 
     else:
         if not args.mlu:
             print('doing cpu inference')
             with torch.no_grad():
-                bgt = time.time()
-                out = model(data)
-                out = out.data.cpu().numpy().reshape(-1,512)
-                timing = time.time() - bgt
-                print('using {:.3f}s per img'.format(timing/K))
-                np.save('cpu_out.npy',out)
-            # np.savetxt("cpu_out.txt", out.cpu().detach().numpy().reshape(-1,1), fmt='%.6f')
+                preds = model(data)
+                _preds = fetch_cpu_data(preds, args.half_input)
+
+                np.save('cpu_pred.npy', _preds)
             print("run cpu finish!")
         else:
             print('doing mlu inference')
             # model = quantize_model(model, inplace=True)
             model = mlu_quantize.quantize_dynamic_mlu(model)
-            checkpoint = torch.load('./weights/face_rec/resnet101_mlu_int8.pth', map_location='cpu')
+            checkpoint = torch.load('./weights/face_det/retinaface_mlu_int8.pth', map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             # model.eval().float()
             model = model.to(ct.mlu_device())
             if args.jit:
                 print('using jit inference')
-                randinput = torch.rand(1,3,112,112)*255
+                randinput = torch.rand(1,3,IMG_SIZE[1],IMG_SIZE[0])*255
                 randinput = randinput.to(ct.mlu_device())
                 traced_model = torch.jit.trace(model, randinput, check_trace=False)
                 # print(traced_model.graph)
                 print('start inference')
-                bgt = time.time()
-                out = traced_model(data)
+                preds = traced_model(data)
                 print('end inference')
-                timing = time.time() - bgt
-                print('using {:.3f}s per img'.format(timing / K))
-                if args.half_input:
-                    out = out.cpu().type(torch.FloatTensor)
-                else:
-                    out = out.cpu()
-                print('saving', out.shape)
-                np.save('mlu_out_jit.npy', out.detach().numpy().reshape(-1, 512))
-                # np.savetxt("mlu_out_firstconv_half_4c.txt", out.detach().numpy().reshape(-1,1), fmt='%.6f')
+                _preds = fetch_cpu_data(preds, args.half_input)
+                print('saving', _preds.shape)
+                np.save('mlu_jit_pred.npy', _preds)
                 print("run mlu fusion finish!")
             else:
                 print('using layer by layer inference')
-                bgt = time.time()
-                out = model(data)
+                data = data.to(ct.mlu_device())
+                preds = model(data)
                 print('done')
-                timing = time.time() - bgt
-                print('using {:.3f}s per img'.format(timing / K))
-                if args.half_input:
-                    out = out.cpu().type(torch.FloatTensor)
-                else:
-                    out = out.cpu()
-                print('out:', out.shape)
-                np.save('mlu_out.npy', out.detach().numpy().reshape(-1, 512))
+                _preds = fetch_cpu_data(preds, args.half_input)
+                print('saving', _preds.shape )
+                np.save('mlu_pred.npy', _preds)
                 print("run mlu layer_by_layer finish!")
 
 

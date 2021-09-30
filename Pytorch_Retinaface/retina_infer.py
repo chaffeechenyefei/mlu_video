@@ -6,6 +6,7 @@ import torch.backends.cudnn as cudnn
 import numpy as np
 import torch.nn as nn
 import json
+import torchvision
 
 # curPath = os.path.abspath(os.path.dirname(__file__))
 # sys.path.append(curPath)
@@ -17,7 +18,7 @@ from layers.functions.prior_box import PriorBox
 from utils.nms.py_cpu_nms import py_cpu_nms
 import cv2
 from models.retinaface import RetinaFace
-from utils.box_utils import decode, decode_landm, batch_decode_landm, batch_decode
+from utils.box_utils import decode, decode_landm, batch_decode_landm, batch_decode, xywh2xyxy, xyxy2xywh
 
 pj = os.path.join
 
@@ -103,6 +104,266 @@ def load_model(model, pretrained_path, load_to_cpu):
     check_keys(model, pretrained_dict)
     model.load_state_dict(pretrained_dict, strict=False)
     return model
+
+
+class RetinaFaceDetModule(nn.Module):
+    def __init__(self,model_type="mobile0.25",model_path="./weights/mobilenet0.25_Final.pth",
+                 backbone_location="./weights/mobilenetV1X0.25_pretrain.tar",H=720,W=1024,use_cpu=True,loading=True):
+        super(RetinaFaceDetModule,self).__init__()
+        self.cfg = None
+        self.use_cpu = use_cpu
+        self.use_mlu = False
+        self.model_path = model_path
+        if model_type == "mobile0.25":
+            self.cfg = cfg_mnet
+        elif model_type == "resnet50":
+            self.cfg = cfg_re50
+        self.device = torch.device("cpu" if use_cpu else "cuda")
+        self.net = RetinaFace(cfg=self.cfg,phase="test",backbone_location=backbone_location)
+        if loading:
+            print('No model path exist!') if not os.path.exists(model_path) else None
+            self.loading()
+
+        self._priors = None
+        self.im_width = W
+        self.im_height = H
+        self.im_nch = 3
+
+        _prior = self.set_default_size([H,W,3])
+        self.scale = nn.Parameter( torch.Tensor([self.im_width, self.im_height] * 2) )
+        self.scale1 = nn.Parameter( torch.Tensor([self.im_width, self.im_height] * 5) )
+
+        self.priors = nn.Parameter( _prior )
+
+    def loading(self):
+        self.net = load_model(self.net, self.model_path, self.use_cpu)
+        self.net.eval()
+        self.net = self.net.to(self.device)
+
+    def set_default_size(self,imgshape=[640,480,3]):#[H,W,nCh]
+        self.im_height,self.im_width,self.im_nch = imgshape
+        """
+        priorbox shape [-1,4]; dim0: number of predicted bbox from network; dim1:[x_center,y_center,w,h]
+        priorbox存储的内容分别是bbox中心点的位置以及人脸预设的最小尺寸，长宽比例通过variance解决
+        这里的数值都是相对图像尺寸而言的相对值，取值在(0,1)之间
+        """
+        priorbox = PriorBox(self.cfg,image_size=(self.im_height,self.im_width))
+        _priors = priorbox.forward()
+        _priors = _priors.unsqueeze(dim=0)
+        return _priors
+
+    def forward(self, img_batch):
+        locs, confs, landmss = self.net(img_batch)
+
+        boxes = batch_decode(locs, self.priors, self.cfg['variance'])
+        boxes = boxes * self.scale#[B,N,4]
+
+        scores = confs[:, :, 1:2]#[B,N,1]
+
+        landms = batch_decode_landm(landmss, self.priors, self.cfg['variance'])
+        landms = landms * self.scale1#[B,N,10]
+
+        preds = torch.cat([scores,boxes,landms],dim=2) #[B,N,(1+4+10)]
+
+        return preds
+
+    # def execute_batch_mlu(self, net_output, keep_topk=100, nms_threshold=0.2):
+    #     xyxys = net_output[:, :, 1:5]
+    #     scores = net_output[:, :, 0]
+    #     landmss = net_output[:, :, 5:]
+    #
+    #     nB,nN,nD = net_ouput.shape
+    #
+    #     detss = torch.zeros((nB,keep_topk,nD),device=net_ouput.device)
+    #     for n in range(nB):
+    #         _score = scores[n]
+    #         _xyxy = xyxys[n]
+    #         i = torchvision.ops.nms(_xyxy,_score, nms_threshold)
+    #         if i.shape[0] > keep_topk:
+    #             i = i[:keep_topk]
+    #         sxyxylandm = net_ouput[n] #[n,d]
+    #         sxyxylandm = sxyxylandm[i] #[n-,d]
+    #         n_left = sxyxylandm.shape[0]
+    #         detss[n,:n_left,:] = sxyxylandm[:,:]
+    #     return detss
+
+
+
+class RetinaFaceDetModuleNMS(nn.Module):
+    def __init__(self,model_type="mobile0.25",model_path="./weights/mobilenet0.25_Final.pth",
+                 backbone_location="./weights/mobilenetV1X0.25_pretrain.tar",use_cpu=True,loading=True):
+        super(RetinaFaceDetModuleNMS,self).__init__()
+        self.cfg = None
+        self.use_cpu = use_cpu
+        self.model_path = model_path
+        if model_type == "mobile0.25":
+            self.cfg = cfg_mnet
+        elif model_type == "resnet50":
+            self.cfg = cfg_re50
+        self.device = torch.device("cpu" if use_cpu else "cuda")
+        self.net = RetinaFace(cfg=self.cfg,phase="test",backbone_location=backbone_location)
+        if loading:
+            print('No model path exist!') if not os.path.exists(model_path) else None
+            self.loading()
+
+        self._priors = None
+        self.im_width = 0
+        self.im_height = 0
+        self.im_nch = 0
+
+    def loading(self):
+        self.net = load_model(self.net, self.model_path, self.use_cpu)
+        self.net.eval()
+        self.net = self.net.to(self.device)
+
+    def set_default_size(self,imgshape=[640,480,3]):#[H,W,nCh]
+        im_height, im_width, im_nch = imgshape
+        if im_height == self.im_height and im_width == self.im_width and self._priors is not None:
+            pass
+        else:
+            self.im_height,self.im_width,self.im_nch = imgshape
+            """
+            priorbox shape [-1,4]; dim0: number of predicted bbox from network; dim1:[x_center,y_center,w,h]
+            priorbox存储的内容分别是bbox中心点的位置以及人脸预设的最小尺寸，长宽比例通过variance解决
+            这里的数值都是相对图像尺寸而言的相对值，取值在(0,1)之间
+            """
+            priorbox = PriorBox(self.cfg,image_size=(self.im_height,self.im_width))
+            self._priors = priorbox.forward()
+
+    def forward(self, img_batch):
+        # threshold = 0.8
+        # topk = 5000
+        # keep_topk = 750
+        # nms_threshold = 0.2
+        locs, confs, landmss = self.net(img_batch)
+
+        im_height, im_width = self.im_height, self.im_width
+        scale = torch.Tensor([im_width, im_height] * 2).to(img_batch.device)
+        scale1 = torch.Tensor([im_width, im_height] * 5).to(img_batch.device)
+        # detss = []
+
+        priors = self._priors.unsqueeze(dim=0).to(img_batch.device)
+
+        boxes = batch_decode(locs, priors, self.cfg['variance'])
+        boxes = boxes * scale#[B,N,4]
+
+        scores = confs[:, :, 1:2]#[B,N,1]
+
+        landms = batch_decode_landm(landmss, priors, self.cfg['variance'])
+        landms = landms * scale1#[B,N,10]
+
+        preds = torch.cat([scores,boxes,landms],dim=2) #[B,N,(1+4+10)]
+        detss = self.execute_batch_mlu(preds)
+
+        return detss
+
+    def execute_batch_mlu(self, net_output, keep_topk=100, nms_threshold=0.2):
+        xyxys = net_output[:, :, 1:5]
+        scores = net_output[:, :, 0]
+        landmss = net_output[:, :, 5:]
+
+        nB,nN,nD = net_output.shape
+
+        detss = torch.zeros((nB,keep_topk,nD)).to(net_output.device)
+        for n in range(nB):
+            _score = scores[n]
+            _xyxy = xyxys[n]
+            i = torchvision.ops.nms(_xyxy,_score, nms_threshold)
+            if i.shape[0] > keep_topk:
+                i = i[:keep_topk]
+            sxyxylandm = net_output[n] #[n,d]
+            sxyxylandm = sxyxylandm[i] #[n-,d]
+            n_left = sxyxylandm.shape[0]
+            detss[n,:n_left,:] = sxyxylandm[:,:]
+        return detss
+
+
+def execute_batch_mlu(net_output, batch_shape, threshold=0.8, topk=5000, keep_topk=750, nms_threshold=0.2):
+    locs = net_output[:,:,1:5]
+    confs = net_output[:,:,0]
+    landmss=net_output[:,:,5:]
+    # locs, confs, landmss = net_output
+    nB, nCh, im_height, im_width = batch_shape
+    scale = torch.Tensor([im_width, im_height] * 2)
+    scale1 = torch.Tensor([im_width, im_height] * 5)
+
+    detss = []
+
+
+    boxes = locs
+    scores = confs
+    landms = landmss
+
+    landms = landms.data.cpu().numpy()
+    scores = scores.data.cpu().numpy()
+    boxes = boxes.data.cpu().numpy()
+
+    for n in range(nB):
+        _landms = landms[n]
+        _scores = scores[n]
+        _boxes = boxes[n]
+
+        # ignore low scores
+        inds = np.where(_scores > threshold)[0]
+        _boxes = _boxes[inds]
+        _landms = _landms[inds]
+        _scores = _scores[inds]
+
+        # keep top-K before NMS
+        order = _scores.argsort()[::-1][:topk]
+        _boxes = _boxes[order]
+        _landms = _landms[order]
+        _scores = _scores[order]
+
+        # do NMS
+        dets = np.hstack((_boxes, _scores[:, np.newaxis])).astype(np.float32, copy=False)
+        keep = py_cpu_nms(dets, nms_threshold)
+        dets = dets[keep, :]
+        _landms = _landms[keep]
+
+        # keep top-K faster NMS
+        dets = dets[:keep_topk, :]
+        _landms = _landms[:keep_topk, :]
+        # x0,y0,x1,y1,score,landmarks...
+        dets = np.concatenate((dets, _landms), axis=1)
+        detss.append(dets)
+    return detss
+
+
+
+def box_iou(box1, box2):
+    # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
+    """
+    Return intersection-over-union (Jaccard index) of boxes.
+    Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+    Arguments:
+        box1 (Tensor[N, 4])
+        box2 (Tensor[M, 4])
+    Returns:
+        iou (Tensor[N, M]): the NxM matrix containing the pairwise
+            IoU values for every element in boxes1 and boxes2
+    """
+
+    def box_area(box):
+        # box = 4xn
+        return (box[2] - box[0]) * (box[3] - box[1])
+
+    area1 = box_area(box1.T)
+    area2 = box_area(box2.T)
+
+    # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
+    inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) - torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
+    return inter / (area1[:, None] + area2 - inter)  # iou = inter / (area1 + area2 - inter)
+
+
+def wh_iou(wh1, wh2):
+    # Returns the nxm IoU matrix. wh1 is nx2, wh2 is mx2
+    wh1 = wh1[:, None]  # [N,1,2]
+    wh2 = wh2[None]  # [1,M,2]
+    inter = torch.min(wh1, wh2).prod(2)  # [N,M]
+    return inter / (wh1.prod(2) + wh2.prod(2) - inter)  # iou = inter / (area1 + area2 - inter)
+
+
 
 
 class RetinaFaceDet(object):
@@ -584,7 +845,7 @@ if __name__ == '__main__':
     model = faceDet.net
 
     with torch.no_grad():
-        image_path = "/Users/marschen/Ucloud/Project/git/mlu_videofacerec/Pytorch_Retinaface/sally.jpg"
+        image_path = "sally.jpg"
         img_cv = cv2.imread(image_path)
         img_cv2 = preprocess_retinaface(img_cv,mlu=False)
 
@@ -616,11 +877,11 @@ if __name__ == '__main__':
                             cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
 
                 # landms
-                cv2.circle(img_cv, (b[5], b[6]), 1, (0, 0, 255), 4)
-                cv2.circle(img_cv, (b[7], b[8]), 1, (0, 255, 255), 4)
-                cv2.circle(img_cv, (b[9], b[10]), 1, (255, 0, 255), 4)
-                cv2.circle(img_cv, (b[11], b[12]), 1, (0, 255, 0), 4)
-                cv2.circle(img_cv, (b[13], b[14]), 1, (255, 0, 0), 4)
+                cv2.circle(img_cv, (b[5], b[6]), 1, (0, 0, 255), 4) #Left
+                cv2.circle(img_cv, (b[7], b[8]), 1, (0, 255, 255), 4) #Right
+                cv2.circle(img_cv, (b[9], b[10]), 1, (255, 0, 255), 4) #Nose
+                cv2.circle(img_cv, (b[11], b[12]), 1, (0, 255, 0), 4) #Left mouth
+                cv2.circle(img_cv, (b[13], b[14]), 1, (255, 0, 0), 4) #Right mouth
 
             name = "det_result.jpg"
             cv2.imwrite(name, img_cv)

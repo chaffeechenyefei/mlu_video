@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger("TestNets")
 
 #support model
-support = ['resnet50', 'resnext50_32x4d', 'resnext101_32x8d', 'vgg16', 'inception_v3', 'mobilenet',
+support = ['retinaface','resnet50', 'resnext50_32x4d', 'resnext101_32x8d', 'vgg16', 'inception_v3', 'mobilenet',
            'googlenet', 'resnet101', 'mobilenet_v2', 'mobilenet_v3', 'ssd', 'yolov3', 'alexnet',
            'resnet18', 'resnet34', 'resnet152', 'vgg16_bn', 'squeezenet1_0', 'squeezenet1_1',
            'densenet121', 'faceboxes', 'yolov2', 'pnet', 'rnet', 'onet', 'east', 'ssd_mobilenet_v1',
@@ -136,6 +136,59 @@ def genoff(model, mname, batch_size, core_number, in_heigth, in_width,
     # run inference and save cambricon
     net_traced(example_mlu.to(ct.mlu_device()))
 
+
+def genoff_retinaface(model, mname, batch_size, core_number, in_heigth, in_width,
+           half_input, input_format, fake_device):
+    # set offline flag
+    ct.set_core_number(core_number)
+    ct.set_core_version(mcore)
+    if fake_device:
+        ct.set_device(-1)
+    ct.save_as_cambricon(mname)
+    ct.set_input_format(input_format)
+
+    # construct input tensor
+    net = None
+
+    # IMG_SIZE = [736,416]#[w,h]
+    IMG_SIZE = [736, 416]  # [w,h]
+
+    sys.path.append(pj(curPath, 'Pytorch_Retinaface'))
+    from Pytorch_Retinaface.retina_infer import RetinaFaceDetModule
+
+    print('==pytorch==')
+    loading = False
+    print('loading =',loading)
+    model_path = 'weights/face_det/mobilenet0.25_Final.pth'
+    model_path = os.path.abspath(model_path)
+    print(model_path)
+    infer = RetinaFaceDetModule(model_path=model_path,H=IMG_SIZE[1],W=IMG_SIZE[0],use_cpu=True,loading=loading)
+    # infer.set_default_size([IMG_SIZE[1],IMG_SIZE[0],3])
+    net = infer.eval()
+    print('==end==')
+
+    net = mlu_quantize.quantize_dynamic_mlu(net)
+    checkpoint = torch.load('./weights/face_det/retinaface_mlu_int8.pth', map_location='cpu')
+    net.load_state_dict(checkpoint, strict=False)
+    net = net.to(ct.mlu_device())
+
+
+    # prepare input
+    example_mlu = torch.randn(batch_size, args.channel_size, IMG_SIZE[1], IMG_SIZE[0], dtype=torch.float)
+    randn_mlu = torch.randn(1, args.channel_size, IMG_SIZE[1], IMG_SIZE[0], dtype=torch.float)
+    if half_input:
+        randn_mlu = randn_mlu.type(torch.HalfTensor)
+        example_mlu = example_mlu.type(torch.HalfTensor)
+
+
+    net_traced = torch.jit.trace(net.to(ct.mlu_device()),
+                                 randn_mlu.to(ct.mlu_device()),
+                                 check_trace=False)
+
+
+    # run inference and save cambricon
+    net_traced(example_mlu.to(ct.mlu_device()))
+
 if __name__ == "__main__":
     args = get_args()
     model = args.model
@@ -172,5 +225,11 @@ if __name__ == "__main__":
 
     #genoff
     logger.info("Generate offline model: " + model)
-    genoff(model, mname, batch_size, core_number,
+    if model == 'retinaface':
+        genoff_retinaface(model, mname, batch_size, core_number,
+                          in_height, in_width, half_input, input_format, fake_device)
+    elif model == 'resnet101_irse_mx':
+        genoff(model, mname, batch_size, core_number,
            in_height, in_width, half_input, input_format, fake_device)
+    else:
+        print('Unknown model')
