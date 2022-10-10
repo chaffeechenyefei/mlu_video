@@ -166,7 +166,7 @@ if __name__ == '__main__':
     print('==pytorch==')
     use_device = 'cpu'
     backbone_type = args.model_name
-    model_type = model_dict[args.model_name]['weights']
+    model_type = model_dict[args.model_name]['no_serial_weights']
     model_pth = pj(model_dict[args.model_name]['path'], model_type)
     model_pth = os.path.abspath(model_pth)
     infer = Inference(backbone_type=backbone_type,
@@ -192,7 +192,7 @@ if __name__ == '__main__':
         #print('data:',data)
         print('data.shape=',data.shape)
         output = model_quantized(data)
-        torch.save(model_quantized.state_dict(), "./weights/face_rec/resnet101_mlu_int8.pth")
+        torch.save(model_quantized.state_dict(), "./weights/face_rec/{}_mlu_int8.pth".format(args.model_name))
         print("Resnet101 int8 quantization end!")
         if args.half_input:
             output = output.cpu().type(torch.FloatTensor)
@@ -217,7 +217,7 @@ if __name__ == '__main__':
             print('doing mlu inference')
             # model = quantize_model(model, inplace=True)
             model = mlu_quantize.quantize_dynamic_mlu(model)
-            checkpoint = torch.load('./weights/face_rec/resnet101_mlu_int8.pth', map_location='cpu')
+            checkpoint = torch.load("./weights/face_rec/{}_mlu_int8.pth".format(args.model_name), map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             # model.eval().float()
             model = model.to(ct.mlu_device())

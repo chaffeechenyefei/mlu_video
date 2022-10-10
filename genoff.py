@@ -89,7 +89,7 @@ def genoff(model, mname, batch_size, core_number, in_heigth, in_width,
     ct.set_core_version(mcore)
     if fake_device:
         ct.set_device(-1)
-    ct.save_as_cambricon(mname)
+    ct.save_as_cambricon(pj("./weights/face_rec/",mname))
     ct.set_input_format(input_format)
 
     # construct input tensor
@@ -97,7 +97,6 @@ def genoff(model, mname, batch_size, core_number, in_heigth, in_width,
     in_h = 224
     in_w = 224
 
-    model = 'resnet101_irse_mx'
     print(model)
     sys.path.append(pj(curPath, 'FaceRecog'))
     from cfg import model_dict
@@ -108,7 +107,7 @@ def genoff(model, mname, batch_size, core_number, in_heigth, in_width,
                       device=use_device)
     net = infer._get_model()
     net = mlu_quantize.quantize_dynamic_mlu(net)
-    checkpoint = torch.load('./weights/face_rec/resnet101_mlu_int8.pth', map_location='cpu')
+    checkpoint = torch.load("./weights/face_rec/{}_mlu_int8.pth".format(model), map_location='cpu')
     net.load_state_dict(checkpoint, strict=False)
     net = net.to(ct.mlu_device())
     in_h = 112
@@ -168,7 +167,7 @@ def genoff_retinaface(model, mname, batch_size, core_number, in_heigth, in_width
     print('==end==')
 
     net = mlu_quantize.quantize_dynamic_mlu(net)
-    checkpoint = torch.load('./weights/face_det/retinaface_mlu_int8.pth', map_location='cpu')
+    checkpoint = torch.load('./weights/face_det/{}_mlu_int8.pth'.format(model), map_location='cpu')
     net.load_state_dict(checkpoint, strict=False)
     net = net.to(ct.mlu_device())
 

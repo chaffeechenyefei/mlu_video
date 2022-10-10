@@ -91,6 +91,7 @@ def fetch_cpu_data(x,use_half_input=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--model_name', default='retinaface')
     parser.add_argument('--check',action='store_true',help='result will be compared only...')
     parser.add_argument('--data',help='data path to the images used for quant')
     parser.add_argument('--ext',default='.jpg')
@@ -197,7 +198,7 @@ if __name__ == '__main__':
         #print('data:',data)
         print('data.shape=',data.shape)
         preds = model_quantized(data)
-        torch.save(model_quantized.state_dict(), "./weights/face_det/retinaface_mlu_int8.pth")
+        torch.save(model_quantized.state_dict(), "./weights/face_det/{}_mlu_int8.pth".format(args.model_name))
         print("Retinaface int8 quantization end!")
         _preds = fetch_cpu_data(preds,args.half_input)
 
@@ -219,7 +220,7 @@ if __name__ == '__main__':
             print('doing mlu inference')
             # model = quantize_model(model, inplace=True)
             model = mlu_quantize.quantize_dynamic_mlu(model)
-            checkpoint = torch.load('./weights/face_det/retinaface_mlu_int8.pth', map_location='cpu')
+            checkpoint = torch.load("./weights/face_det/{}_mlu_int8.pth".format(args.model_name), map_location='cpu')
             model.load_state_dict(checkpoint, strict=False)
             # model.eval().float()
             model = model.to(ct.mlu_device())
