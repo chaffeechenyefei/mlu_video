@@ -263,6 +263,13 @@ def batch_decode(loc, priors, variances):
         decoded bounding box predictions
     """
     # boxes= priors[:, :, :2] + loc[:, :, :2] * variances[0] * priors[:, :, 2:]
+    # import json
+    # with open('priors', 'w') as f:
+    #     json.dump(priors.shape, f)
+    # with open('loc', 'w') as f:
+    #     json.dump(loc.shape, f)
+    # with open('variance', 'w') as f:
+    #     json.dump( variances.shape, f)
     _boxes = torch.cat((
         priors[:,:, :2] + loc[:,:, :2] * variances[0] * priors[:,:, 2:],
         priors[:,:, 2:] * torch.exp(loc[:,:, 2:] * variances[1])), 2)
