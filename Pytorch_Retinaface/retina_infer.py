@@ -18,7 +18,7 @@ from layers.functions.prior_box import PriorBox
 from utils.nms.py_cpu_nms import py_cpu_nms
 import cv2
 from models.retinaface import RetinaFace
-from utils.box_utils import decode, decode_landm, batch_decode_landm, batch_decode, xywh2xyxy, xyxy2xywh
+from utils.box_utils import decode, decode_landm,batch_decode_rknn, batch_decode_landm, batch_decode, xywh2xyxy, xyxy2xywh
 
 pj = os.path.join
 
@@ -130,10 +130,17 @@ class RetinaFaceDetModule(nn.Module):
         self.im_nch = 3
 
         _prior = self.set_default_size([H,W,3])
-        self.scale = nn.Parameter( torch.Tensor([self.im_width, self.im_height] * 2) )
-        self.scale1 = nn.Parameter( torch.Tensor([self.im_width, self.im_height] * 5) )
+        self.scale = nn.Parameter( torch.Tensor([self.im_width, self.im_height] * 2).reshape(1,1,4) )
+        self.scale1 = nn.Parameter( torch.Tensor([self.im_width, self.im_height] * 5).reshape(1,1,10) )
+
 
         self.priors = nn.Parameter( _prior )
+
+        print('**variance**',self.cfg['variance'])
+        print('**scale**', self.scale.size())
+        print('**scale1**', self.scale1.size())
+        print('**priors**', self.priors.size())
+
 
     def loading(self):
         self.net = load_model(self.net, self.model_path, self.use_cpu)
@@ -154,18 +161,33 @@ class RetinaFaceDetModule(nn.Module):
 
     def forward(self, img_batch):
         locs, confs, landmss = self.net(img_batch)
+        # print('**use_mlu**',self.use_mlu)
+        # locs1,locs2,locs3 = self.net(img_batch)
+        # print('**locs**',locs1.size(),locs2.size(),locs3.size())
+        if not self.use_mlu:
+            scores = confs[:, :, 1:2]  # [B,N,1]
+            # landms = batch_decode_landm(landmss, self.priors, self.cfg['variance'])
+            # boxes = batch_decode_rknn(locs, self.priors, self.cfg['variance'])
+            # boxes = boxes * self.scale  # [B,N,4]
+            # boxes = locs * self.scale  # [B,N,4]
+            # landms = landms * self.scale1  # [B,N,10]
+            # locs1 = locs1*self.scale
+            # locs2 = locs2* self.scale
+            # locs3 = locs3 * self.scale
 
-        boxes = batch_decode(locs, self.priors, self.cfg['variance'])
-        boxes = boxes * self.scale#[B,N,4]
+            return [locs, scores, landmss]
+        else:
+            boxes = batch_decode(locs, self.priors, self.cfg['variance'])
+            boxes = boxes * self.scale#[B,N,4]
 
-        scores = confs[:, :, 1:2]#[B,N,1]
+            scores = confs[:, :, 1:2]#[B,N,1]
 
-        landms = batch_decode_landm(landmss, self.priors, self.cfg['variance'])
-        landms = landms * self.scale1#[B,N,10]
+            landms = batch_decode_landm(landmss, self.priors, self.cfg['variance'])
+            landms = landms * self.scale1#[B,N,10]
 
-        preds = torch.cat([scores,boxes,landms],dim=2) #[B,N,(1+4+10)]
+            preds = torch.cat([scores,boxes,landms],dim=2) #[B,N,(1+4+10)]
 
-        return preds
+            return preds
 
     # def execute_batch_mlu(self, net_output, keep_topk=100, nms_threshold=0.2):
     #     xyxys = net_output[:, :, 1:5]

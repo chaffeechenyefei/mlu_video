@@ -275,6 +275,31 @@ def batch_decode(loc, priors, variances):
     # boxes[:,:, 2:] += boxes[:,:, :2]
     return boxes
 
+def batch_decode_rknn(loc, priors, variances):
+    """Decode locations from predictions using priors to undo
+    the encoding we did for offset regression at train time.
+    Args:
+        loc (tensor): location predictions for loc layers,
+            Shape: [num_priors,4]
+        priors (tensor): Prior boxes in center-offset form.
+            Shape: [num_priors,4].
+        variances: (list[float]) Variances of priorboxes
+    Return:
+        decoded bounding box predictions
+    """
+    # boxes= priors[:, :, :2] + loc[:, :, :2] * variances[0] * priors[:, :, 2:]
+    bx1 = priors[:,:, :2] + loc[:,:, :2] * variances[0] * priors[:,:, 2:]
+    bx2 = priors[:,:, 2:] * torch.exp(loc[:,:, 2:] * variances[1])
+
+
+    bx1 = bx1 - bx2/2
+    bx2 = bx1 + bx2
+    boxes = torch.cat([bx1,bx2],2)
+    # onnx不能适应这种内部之间的嵌套式调用
+    # boxes[:,:, :2] -= boxes[:,:, 2:] / 2
+    # boxes[:,:, 2:] += boxes[:,:, :2]
+    return boxes
+
 def decode_landm(pre, priors, variances):
     """Decode landm from predictions using priors to undo
     the encoding we did for offset regression at train time.

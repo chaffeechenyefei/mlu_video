@@ -27,7 +27,8 @@ support = ['retinaface','resnet50', 'resnext50_32x4d', 'resnext101_32x8d', 'vgg1
            'resnet18', 'resnet34', 'resnet152', 'vgg16_bn', 'squeezenet1_0', 'squeezenet1_1',
            'densenet121', 'faceboxes', 'yolov2', 'pnet', 'rnet', 'onet', 'east', 'ssd_mobilenet_v1',
            'efficientnet', 'ssd_mobilenet_v2', 'ssd', 'PreActResNet50', 'PreActResNet101',
-           'fasterrcnn_fpn', 'centernet', 'fcn8s', 'segnet', 'vdsr', 'fsrcnn', 'yolov4', 'yolov5', 'resnet101_irse_mx']
+           'fasterrcnn_fpn', 'centernet', 'fcn8s', 'segnet', 'vdsr', 'fsrcnn', 'yolov4', 'yolov5',
+           'resnet101_irse_mx','resnet50_irse_mx']
 
 abs_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -227,7 +228,7 @@ if __name__ == "__main__":
     if model == 'retinaface':
         genoff_retinaface(model, mname, batch_size, core_number,
                           in_height, in_width, half_input, input_format, fake_device)
-    elif model == 'resnet101_irse_mx':
+    elif model in ['resnet101_irse_mx','resnet50_irse_mx']:
         genoff(model, mname, batch_size, core_number,
            in_height, in_width, half_input, input_format, fake_device)
     else:
