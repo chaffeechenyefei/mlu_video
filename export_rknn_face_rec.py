@@ -203,12 +203,13 @@ if __name__ == '__main__':
 
         print('--> pytorch infering')
         outputs = pynet(pydata)
-        if isinstance(outputs, list):
+        if isinstance(outputs, list) or isinstance(outputs, tuple):
             for o in outputs:
                 print(o.shape)
                 print(o.reshape(-1)[:5].data.numpy())
         else:
             print(outputs.shape)
+            print(outputs.reshape(-1)[:5].data.numpy())
 
 
         print('--> Import RKNN model and infering')
@@ -232,6 +233,7 @@ if __name__ == '__main__':
                 print(o.reshape(-1)[:5])
         else:
             print(outputs.shape)
+            print(o.reshape(-1)[:5])
         # print(outputs[0][0].shape)
         # print(outputs[0][0])#if model already softmax
         print('done')
